@@ -1,211 +1,129 @@
-# Evalio
+<div align="center">
+  <h1 style="margin-bottom: 0.25rem;">Evalio Frontend</h1>
+  <p style="margin-top: 0; color: #6b7280;">Public-facing dashboard for the Evalio hackathon evaluation platform.</p>
+  <p>
+    <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white" />
+    <img alt="React" src="https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white" />
+    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white" />
+  </p>
+  <p>
+    <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?logo=tailwindcss&logoColor=white" />
+    <img alt="shadcn/ui" src="https://img.shields.io/badge/shadcn%2Fui-Radix-000000?logo=shadcnui&logoColor=white" />
+    <img alt="TanStack Query" src="https://img.shields.io/badge/TanStack%20Query-5-FF4154?logo=reactquery&logoColor=white" />
+  </p>
+</div>
 
-A modern hackathon project evaluation platform built with Next.js, featuring AI-powered project analysis and semantic search capabilities.
+---
+
+## Overview
+
+Evalio Frontend is the participant-facing interface of the Evalio platform. Organizers create hackathons with custom criteria, participants submit projects via GitHub link, and everyone follows AI-driven evaluations as they run — wrapped in a neo-brutalist design.
+
+- 🏆 **Hackathon dashboard** — browse and create hackathons with custom evaluation criteria.
+- 📦 **Project submission** — GitHub link, description, and project type; triggers async AI analysis in the background.
+- 🔄 **Live polling** — project page auto-refreshes while agents are running, settles once results land.
+- 🤖 **AI results** — per-criterion code analysis, market research, and an overall 0–10 score.
+- 💬 **Project chat** — ask questions about a project, answered by the chat agent.
+- 🔍 **Semantic search** — natural-language search across all projects.
+- 🎨 **Neo-brutalist design** — bold offset shadows, thick borders, mustard/coral/mint/sky accent palette.
+
+Built on Next.js App Router. Data fetching and polling are handled entirely through TanStack Query hooks talking to the Evalio FastAPI backend.
+
+---
+
+## Table of Contents
+
+- [Structure](#structure)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Environment](#environment)
+- [Deployment](#deployment)
+
+## Structure
+
+```
+evalio-frontend/
+  src/
+    app/
+      page.tsx                  # Home — hackathon list
+      hackathon/[id]/page.tsx   # Hackathon detail — project list + leaderboard
+      project/[id]/page.tsx     # Project detail — AI analyses, score, chat
+      search/page.tsx           # Global semantic search
+      dashboard/page.tsx        # Dashboard overview
+    components/
+      AddProjectModal.tsx        # Project submission form
+      CreateHackathonModal.tsx   # Hackathon creation form
+      AgentPollingStatus.tsx     # Live indicator for agent progress
+      ChatInterface.tsx          # Project-aware chat widget
+      HackathonCard.tsx          # Hackathon summary card
+      ProjectCard.tsx            # Project card with score badge
+      StatusBadge.tsx            # analyzed / pending / flagged pill
+      Topbar.tsx                 # Global nav bar
+      ui/                        # shadcn/ui primitives
+    lib/
+      api.ts                    # Typed API client + domain types
+      constants.ts              # API base URL, polling interval
+      utils.ts                  # Shared utilities
+      hooks/                    # TanStack Query hooks (hackathons, projects, search, chat)
+  .env.example
+  next.config.ts
+  wrangler.jsonc                # Cloudflare Workers config
+```
 
 ## Tech Stack
 
-### Core Framework
-- **Next.js** `16.2.4` - React framework with App Router
-- **React** `19.2.4` - UI library
-- **React DOM** `19.2.4` - DOM rendering
+- **Framework:** Next.js 16 (App Router), React 19
+- **Styling:** Tailwind CSS 4
+- **UI Components:** shadcn/ui (Radix UI primitives)
+- **State / Data:** TanStack Query v5
+- **Forms:** react-hook-form + Zod
+- **Charts:** Recharts
+- **Tooling:** TypeScript 5, ESLint 9, Prettier
 
-### Styling & UI
-- **Tailwind CSS** `^4` - Utility-first CSS framework
-- **@tailwindcss/postcss** `^4` - PostCSS plugin for Tailwind v4
-- **tw-animate-css** `^1.3.4` - Tailwind animation utilities
-- **class-variance-authority** `^0.7.1` - Component variant management
-- **clsx** `^2.1.1` - Conditional className utility
-- **tailwind-merge** `^3.5.0` - Merge Tailwind classes
+## Architecture
 
-### Radix UI Components
-- **@radix-ui/react-dialog** `^1.1.15` - Modal dialogs
-- **@radix-ui/react-dropdown-menu** `^2.1.16` - Dropdown menus
-- **@radix-ui/react-select** `^2.2.6` - Select components
-- **@radix-ui/react-tabs** `^1.1.13` - Tab navigation
-- **@radix-ui/react-popover** `^1.1.15` - Popover components
-- **@radix-ui/react-tooltip** `^1.2.8` - Tooltips
-- **@radix-ui/react-accordion** `^1.2.12` - Accordion sections
-- **@radix-ui/react-alert-dialog** `^1.1.15` - Alert modals
-- **@radix-ui/react-avatar** `^1.1.11` - Avatar components
-- **@radix-ui/react-checkbox** `^1.3.3` - Checkbox inputs
-- **@radix-ui/react-collapsible** `^1.1.12` - Collapsible sections
-- **@radix-ui/react-context-menu** `^2.2.16` - Context menus
-- **@radix-ui/react-hover-card** `^1.1.15` - Hover cards
-- **@radix-ui/react-label** `^2.1.8` - Form labels
-- **@radix-ui/react-menubar** `^1.1.16` - Menu bars
-- **@radix-ui/react-navigation-menu** `^1.2.14` - Navigation menus
-- **@radix-ui/react-progress** `^1.1.8` - Progress bars
-- **@radix-ui/react-radio-group** `^1.3.8` - Radio groups
-- **@radix-ui/react-scroll-area** `^1.2.10` - Custom scrollbars
-- **@radix-ui/react-separator** `^1.1.8` - Visual separators
-- **@radix-ui/react-slider** `^1.3.6` - Slider inputs
-- **@radix-ui/react-slot** `^1.2.4` - Slot components
-- **@radix-ui/react-switch** `^1.2.6` - Toggle switches
-- **@radix-ui/react-toggle** `^1.1.10` - Toggle buttons
-- **@radix-ui/react-toggle-group** `^1.1.11` - Toggle groups
-- **@radix-ui/react-aspect-ratio** `^1.1.8` - Aspect ratio boxes
+```mermaid
+flowchart LR
+  user[User] --> next[Next.js App Router]
+  next --> hooks[TanStack Query Hooks]
+  hooks -->|polling| api[Evalio FastAPI\n/api/**]
+  api --> agents[Code Agent\nMarket Agent\nChat Agent]
+  agents --> pg[(PostgreSQL)]
+  next --> chat[ChatInterface]
+  chat --> api
+```
 
-### State Management & Data Fetching
-- **@tanstack/react-query** `^5.83.0` - Data fetching and caching
+## Quick Start
 
-### Form Handling & Validation
-- **react-hook-form** `^7.71.2` - Form state management
-- **zod** `^3.24.2` - Schema validation
-- **@radix-ui/react-form** (via other components) - Form primitives
-
-### Additional UI Components
-- **lucide-react** `^0.575.0` - Icon library
-- **sonner** `^2.0.7` - Toast notifications
-- **cmdk** `^1.1.1` - Command palette
-- **date-fns** `^4.1.0` - Date utility library
-- **react-day-picker** `^9.14.0` - Date picker component
-- **embla-carousel-react** `^8.6.0` - Carousel component
-- **input-otp** `^1.4.2` - OTP input component
-- **react-resizable-panels** `^4.6.5` - Resizable panels
-- **recharts** `^2.15.4` - Charting library
-- **vaul** `^1.1.2` - Drawer component
-
-### Development Tools
-- **TypeScript** `^5` - Type-safe JavaScript
-- **ESLint** `^9` - Code linting
-- **eslint-config-next** `16.2.4` - Next.js ESLint config
-- **@types/node** `^20` - Node.js type definitions
-- **@types/react** `^19` - React type definitions
-- **@types/react-dom** `^19` - React DOM type definitions
-
-## Getting Started
-
-### Prerequisites
-- Node.js (LTS version recommended)
-- npm, yarn, pnpm, or bun
-
-### Installation
+1. **Install dependencies**
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd HACKATHON--FRONTEND
-
-# Install dependencies
 npm install
-# or
-yarn install
-# or
-pnpm install
-# or
-bun install
+# or bun install
 ```
 
-### Environment Setup
+2. **Configure environment**
 
-Create a `.env.local` file in the root directory:
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000/api
+```bash
+cp .env.example .env.local
+# Set NEXT_PUBLIC_API_URL to point at your Evalio backend
 ```
 
-### Development
+3. **Start the dev server**
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs on `http://localhost:3000`. The Evalio backend must be running on `http://localhost:8000` (or whichever URL you configured).
 
-### Build
+## Environment
 
-```bash
-npm run build
-# or
-yarn build
-# or
-pnpm build
-# or
-bun build
-```
+| Variable | Description | Default |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | Base URL of the Evalio FastAPI backend | `http://localhost:8000/api` |
 
-### Production Start
+## Deployment
 
-```bash
-npm run start
-# or
-yarn start
-# or
-pnpm start
-# or
-bun start
-```
-
-### Linting
-
-```bash
-npm run lint
-# or
-yarn lint
-# or
-pnpm lint
-# or
-bun lint
-```
-
-## Project Structure
-
-```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── page.tsx           # Dashboard (list hackathons)
-│   ├── hackathon/[id]/    # Hackathon detail (list projects)
-│   ├── project/[id]/      # Project detail
-│   ├── search/page.tsx    # Semantic search
-│   └── setup/page.tsx     # Create hackathon
-├── lib/                   # Utilities and API client
-│   ├── api.ts            # API client + types
-│   ├── constants.ts       # Config (API base URL, colors)
-│   ├── utils.ts          # Utilities (extractScore, cn)
-│   └── hooks/            # TanStack Query hooks
-└── components/            # Reusable components
-    ├── ui/               # Radix UI primitives
-    ├── ProjectCard.tsx    # Project display
-    ├── HackathonCard.tsx  # Hackathon display
-    ├── Topbar.tsx         # Navigation
-    └── PageTransition.tsx # Route animations
-```
-
-## Design System (Neo-brutalism)
-
-- **Colors**: `--brand-ink` (#111), `--brand-mustard` (#E3A018), `--brand-coral` (#FF6B6B), `--brand-mint` (#7FBC8C), `--brand-sky` (#69D2E7)
-- **Borders**: 2.5px solid black
-- **Shadows**: Offset hard shadows (e.g., `4px 4px 0 var(--brand-ink)`)
-- **Radius**: `--radius-md: 3px`
-
-## API Endpoints
-
-The application connects to a backend API with the following endpoints:
-
-- `GET /get-all-hackathons` - List all hackathons
-- `GET /get-hackathon/{id}` - Get hackathon details
-- `GET /get-hackathon-projects/{id}` - Get projects for a hackathon
-- `POST /create-hackathon` - Create a new hackathon
-- `POST /create-project` - Submit a project
-- `POST /review` - Approve/reject a project
-
-API Base URL: `http://localhost:8000/api` (configurable via `NEXT_PUBLIC_API_URL`)
-
-## Features
-
-- 📊 **Hackathon Management** - Create and manage hackathon events
-- 🎯 **Project Evaluation** - AI-powered project analysis and scoring
-- 🔍 **Semantic Search** - Search across all projects and hackathons
-- 📈 **Real-time Updates** - Polling-based status updates (5000ms interval)
-- 🎨 **Neo-brutalism Design** - Bold, distinctive visual style
-- 📱 **Responsive** - Works on desktop and mobile devices
-
-## License
-
-MIT
+The project includes a `wrangler.jsonc` for Cloudflare Workers deployment. For standard Node.js hosting (Vercel, Railway, etc.), `next build && next start` works out of the box. Set `NEXT_PUBLIC_API_URL` in your platform's environment variables to point at the deployed backend.
