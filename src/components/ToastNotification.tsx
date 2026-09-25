@@ -3,25 +3,24 @@ import { Toaster } from "sonner";
 export function ToastNotification() {
   return (
     <Toaster
-      position="top-right"
+      position="bottom-right"
+      duration={4000}
       toastOptions={{
         style: {
-          border: "2.5px solid #111",
-          boxShadow: "4px 4px 0 #111",
-          borderRadius: "3px",
+          border: "2px solid var(--ink)",
+          boxShadow: "4px 4px 0 var(--ink)",
+          borderRadius: "10px",
           fontFamily: "var(--font-sans)",
-          fontWeight: 500,
+          fontWeight: 600,
           fontSize: "14px",
+          color: "var(--ink)",
         },
         classNames: {
-          // default / loading
-          toast: "!bg-[#F4D738] !text-[#111]",
-          // per-type overrides via sonner's built-in class names
-          success: "!bg-[#7FBC8C] !text-[#0a2e10]",
-          error: "!bg-[#FF6B6B] !text-[#2a0000]",
-          warning: "!bg-[#E3A018] !text-[#1a0e00]",
-          info: "!bg-[#69D2E7] !text-[#002a30]",
-          // icons inherit text color
+          toast: "!bg-[var(--card)]",
+          success: "!bg-[var(--mint)]",
+          error: "!bg-[var(--coral)]",
+          warning: "!bg-[var(--yellow)]",
+          info: "!bg-[var(--sky)]",
           icon: "!text-current",
         },
       }}

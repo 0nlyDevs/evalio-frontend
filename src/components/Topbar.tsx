@@ -2,122 +2,110 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { Menu, Search, Trophy, X } from "lucide-react";
+import { Logo } from "./Logo";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/search", label: "Search" },
+const NAV = [
+  { href: "/dashboard", label: "Hackathons", icon: Trophy },
+  { href: "/search", label: "Search", icon: Search },
 ] as const;
 
-interface TopbarProps {
-  submissionsOpen?: boolean;
-}
+export function Topbar() {
+  const pathname = usePathname() ?? "";
+  const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
-export function Topbar({ submissionsOpen }: TopbarProps) {
-  const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const isActive = (href: string) =>
+    href === "/dashboard"
+      ? pathname.startsWith("/dashboard") || pathname.startsWith("/hackathon") || pathname.startsWith("/project")
+      : pathname.startsWith(href);
 
   return (
-    <header className="bg-brand-ink" style={{ borderBottom: "2.5px solid var(--brand-mustard)" }}>
-      <div className="h-14 px-4 sm:px-7 flex items-center justify-between max-w-7xl mx-auto">
-        {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0">
-          <img
-            src="/evalio.svg"
-            alt="Evalio"
-            className="w-8 h-8"
-          />
-          <span className="text-base font-medium tracking-wide" style={{ color: "var(--brand-yellow)" }}>
-            Evalio
-          </span>
-          <span className="text-[11px] ml-1 text-neutral-400 hidden sm:inline">
-            hackathon judge panel
-          </span>
+    <header
+      className="sticky top-0 z-40 transition-[background,box-shadow] duration-200"
+      style={{
+        background: scrolled ? "color-mix(in srgb, var(--paper) 92%, transparent)" : "transparent",
+        backdropFilter: scrolled ? "blur(8px)" : undefined,
+        borderBottom: scrolled ? "2px solid var(--ink)" : "2px solid transparent",
+      }}
+    >
+      <div className="h-16 px-4 sm:px-6 max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <Link href="/" className="flex items-center gap-2.5 shrink-0" aria-label="Evalio home">
+          <Logo />
+          <span className="text-lg font-bold tracking-tight">Evalio</span>
+          <span className="hidden md:inline chip bg-yellow/60 ml-1">AI jury</span>
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden sm:flex items-center gap-2">
-          {submissionsOpen !== undefined && (
-            <span
-              className="text-[10px] font-medium px-2 py-0.5 rounded-sm mr-2"
-              style={{
-                background: submissionsOpen ? "var(--brand-mint)" : "var(--brand-coral)",
-                border: "1.5px solid var(--brand-ink)",
-                color: "var(--brand-ink)",
-              }}
-            >
-              {submissionsOpen ? "● Open" : "● Closed"}
-            </span>
-          )}
-          {navItems.map((item) => {
-            const isActive = pathname.startsWith(item.href);
+        <nav className="hidden sm:flex items-center gap-1 rounded-full border-2 border-ink bg-card p-1 shadow-[var(--shadow-hard-sm)]" aria-label="Main">
+          {NAV.map(({ href, label, icon: Icon }) => {
+            const active = isActive(href);
             return (
               <Link
-                key={item.href}
-                href={item.href}
-                className="px-3.5 py-1 text-xs font-medium rounded-sm border-2 transition-colors"
-                style={
-                  isActive
-                    ? { background: "var(--brand-mustard)", borderColor: "var(--brand-mustard)", color: "var(--brand-ink)" }
-                    : { background: "transparent", borderColor: "#444", color: "#ccc" }
-                }
+                key={href}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className="relative px-4 py-1.5 text-sm font-semibold rounded-full flex items-center gap-2"
               >
-                {item.label}
+                {active && (
+                  <motion.span
+                    layoutId="nav-pill"
+                    className="absolute inset-0 rounded-full bg-ink"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+                <Icon size={15} aria-hidden className="relative" style={{ color: active ? "var(--yellow)" : undefined }} />
+                <span className="relative" style={{ color: active ? "var(--paper)" : undefined }}>
+                  {label}
+                </span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Mobile hamburger */}
         <button
-          className="sm:hidden flex flex-col gap-1.5 p-2"
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-label="Toggle menu"
+          className="sm:hidden btn btn-sm"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
         >
-          <span className="block w-5 h-0.5 transition-transform origin-center"
-            style={{ background: "var(--brand-yellow)", transform: menuOpen ? "translateY(8px) rotate(45deg)" : "none" }} />
-          <span className="block w-5 h-0.5 transition-opacity"
-            style={{ background: "var(--brand-yellow)", opacity: menuOpen ? 0 : 1 }} />
-          <span className="block w-5 h-0.5 transition-transform origin-center"
-            style={{ background: "var(--brand-yellow)", transform: menuOpen ? "translateY(-8px) rotate(-45deg)" : "none" }} />
+          {open ? <X size={18} /> : <Menu size={18} />}
         </button>
       </div>
 
-      {/* Mobile dropdown */}
-      {menuOpen && (
-        <nav className="sm:hidden flex flex-col px-4 pb-4 gap-2" style={{ borderTop: "1.5px solid #333" }}>
-          {submissionsOpen !== undefined && (
-            <span
-              className="text-[10px] font-medium px-2 py-1 rounded-sm self-start"
-              style={{
-                background: submissionsOpen ? "var(--brand-mint)" : "var(--brand-coral)",
-                border: "1.5px solid var(--brand-ink)",
-                color: "var(--brand-ink)",
-              }}
-            >
-              Submissions {submissionsOpen ? "open" : "closed"}
-            </span>
-          )}
-          {navItems.map((item) => {
-            const isActive = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMenuOpen(false)}
-                className="px-4 py-2.5 text-sm font-medium rounded-md"
-                style={
-                  isActive
-                    ? { background: "var(--brand-mustard)", color: "var(--brand-ink)", border: "2px solid var(--brand-mustard)" }
-                    : { background: "transparent", color: "#ccc", border: "2px solid #444" }
-                }
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.nav
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="sm:hidden overflow-hidden border-t-2 border-ink bg-paper"
+            aria-label="Mobile"
+          >
+            <div className="px-4 py-3 flex flex-col gap-2">
+              {NAV.map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setOpen(false)}
+                  className={`btn justify-start ${isActive(href) ? "btn-dark" : ""}`}
+                >
+                  <Icon size={16} aria-hidden /> {label}
+                </Link>
+              ))}
+            </div>
+          </motion.nav>
+        )}
+      </AnimatePresence>
     </header>
   );
 }
