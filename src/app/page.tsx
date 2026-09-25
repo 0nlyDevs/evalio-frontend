@@ -1,324 +1,450 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { motion, useScroll, useTransform } from "motion/react";
+import { useRef } from "react";
 import {
-  BlurFade,
-  WordRotate,
-  NumberTicker,
-  Marquee,
-  ShimmerButton,
-  BorderBeam,
-} from "@/components/magic";
+  AlertTriangle, ArrowRight, CheckCircle2, Code2, Gavel, GitBranch, LineChart, Quote, Search, ShieldCheck, Sparkles, Trophy,
+} from "lucide-react";
+import { Logo } from "@/components/Logo";
+import { CountUp, Reveal, easeOut } from "@/components/motion";
+import { ScoreDial } from "@/components/score";
 
-const TECH = ["Next.js", "FastAPI", "MongoDB", "Google Vertex AI", "LangChain", "Python", "Tailwind CSS", "TanStack Query"];
+const CHECKS = [
+  "Reads every source file",
+  "Verifies each claimed feature",
+  "Cites its market sources",
+  "Flags commits made before the event",
+  "Detects hard-coded secrets",
+  "Checks the demo is live",
+  "Spots near-duplicate submissions",
+  "Weights your criteria, not ours",
+];
+
+const JUDGES = [
+  {
+    icon: Code2,
+    name: "Code Judge",
+    color: "var(--sky)",
+    tagline: "Reads the code, not the README.",
+    points: ["Clones & indexes the whole repo", "Measures tests, CI, docs, tooling", "Reviews architecture with file-level evidence", "Scans for leaked keys"],
+  },
+  {
+    icon: LineChart,
+    name: "Market Judge",
+    color: "var(--mint)",
+    tagline: "Researches the market live.",
+    points: ["Plans its own web searches", "Finds real competitors with links", "Sizes the market with citations", "Proposes a business model & risks"],
+  },
+  {
+    icon: Sparkles,
+    name: "Product Judge",
+    color: "var(--violet)",
+    tagline: "Checks you built what you pitched.",
+    points: ["Verifies every claim against the code", "Tests the demo link", "Compares with other submissions", "Scores innovation, theme fit & UX"],
+  },
+];
+
+const STEPS = [
+  { icon: GitBranch, title: "Submit a repo", text: "Teams paste a GitHub link and a short pitch." },
+  { icon: Search, title: "Evidence is gathered", text: "The repo is cloned, measured and indexed; the web is searched." },
+  { icon: Gavel, title: "Three judges deliberate", text: "Each scores the criteria it owns, with rationale and proof." },
+  { icon: Trophy, title: "A ranked leaderboard", text: "Weighted, reproducible scores and integrity flags — live." },
+];
 
 export default function LandingPage() {
   return (
-    <div style={{ background: "#fff", color: "#111" }} className="min-h-screen">
-      <Navbar />
-      <Hero />
-      <StatsStrip />
-      <HowItWorks />
-      <Features />
-      <TechStack />
-      <CtaBanner />
+    <div className="min-h-dvh overflow-x-clip">
+      <Nav />
+      <main id="main">
+        <Hero />
+        <Ticker />
+        <Panel />
+        <HowItWorks />
+        <Integrity />
+        <Cta />
+      </main>
       <Footer />
     </div>
   );
 }
 
-/* ── Navbar ── */
-function Navbar() {
-  const [hidden, setHidden] = useState(false);
-
-  useEffect(() => {
-    let last = window.scrollY;
-    const onScroll = () => {
-      const y = window.scrollY;
-      setHidden(y > 80 && y > last);
-      last = y;
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
+function Nav() {
   return (
-    <header
-      className="sticky top-0 z-50 bg-white px-6 sm:px-10 h-16 flex items-center justify-between"
-      style={{
-        borderBottom: "2px solid #111",
-        transform: hidden ? "translateY(-100%)" : "translateY(0)",
-        transition: "transform 0.3s ease",
-      }}
-    >
-      <a href="#top" className="flex items-center gap-2.5">
-        <div
-          className="w-9 h-9 flex items-center justify-center font-extrabold rounded-[4px]"
-          style={{ background: "#FFDB58", border: "2.5px solid #111", boxShadow: "3px 3px 0 #111" }}
-        >
-          <img src="evalio.svg" alt="logo" />
-        </div>
-        <span className="font-extrabold text-lg tracking-tight">Evalio</span>
-      </a>
-      <nav className="flex items-center gap-1 sm:gap-3">
-        <a href="#how" className="hidden sm:inline px-3 py-1.5 text-sm font-medium hover:underline">How it works</a>
-        <a href="#features" className="hidden sm:inline px-3 py-1.5 text-sm font-medium hover:underline">Features</a>
-        <a href="#agents" className="hidden sm:inline px-3 py-1.5 text-sm font-medium hover:underline">Agents</a>
-        <Link
-          href="/dashboard"
-          className="ml-2 px-4 py-2 text-sm font-bold rounded-[4px] press-brutal"
-          style={{ background: "#FF7A5C", border: "2.5px solid #111", boxShadow: "3px 3px 0 #111", color: "#111" }}
-        >
-          Get started
+    <header className="sticky top-0 z-40 bg-paper/90 backdrop-blur border-b-2 border-ink">
+      <div className="h-16 px-4 sm:px-6 max-w-7xl mx-auto flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2.5" aria-label="Evalio home">
+          <Logo />
+          <span className="text-lg font-bold">Evalio</span>
         </Link>
-      </nav>
+        <nav className="flex items-center gap-1 sm:gap-2" aria-label="Landing">
+          <a href="#judges" className="hidden sm:inline px-3 py-1.5 text-sm font-semibold hover:underline">The judges</a>
+          <a href="#how" className="hidden sm:inline px-3 py-1.5 text-sm font-semibold hover:underline">How it works</a>
+          <Link href="/dashboard" className="btn btn-dark btn-sm ml-2">
+            Open console <ArrowRight size={14} />
+          </Link>
+        </nav>
+      </div>
     </header>
   );
 }
 
 function Hero() {
+  const ref = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
+  const cardY = useTransform(scrollYProgress, [0, 1], [0, 80]);
+  const cardRotate = useTransform(scrollYProgress, [0, 1], [0, -3]);
+
   return (
-    <section id="top" className="px-6 sm:px-10 pt-16 pb-20 max-w-6xl mx-auto text-center">
-      <BlurFade delay={0.1}>
-        <h1 className="mt-6 text-4xl sm:text-6xl font-extrabold leading-[1.05] tracking-tight">
-          Your trusted ally for<br />
-          <span style={{ color: "#FF7A5C" }}>
-            <WordRotate words={["hackathon judging", "AI evaluation", "project analysis"]} />
-          </span>
-        </h1>
-      </BlurFade>
-      <BlurFade delay={0.2}>
-        <p className="mt-6 max-w-2xl mx-auto text-base sm:text-lg text-neutral-700">
-          Evalio analyzes every submission automatically — market research, code quality, and more — so Evalios can focus on what matters.
-        </p>
-      </BlurFade>
-      <BlurFade delay={0.3}>
-        <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <Link href="/dashboard">
-            <ShimmerButton>Start judging →</ShimmerButton>
-          </Link>
-          <a
-            href="#how"
-            className="px-6 py-3 text-sm font-bold rounded-[4px] bg-white press-brutal"
-            style={{ border: "2.5px solid #111", boxShadow: "4px 4px 0 #111" }}
+    <section ref={ref} className="relative px-4 sm:px-6 pt-14 sm:pt-20 pb-20 max-w-7xl mx-auto">
+      <div className="grid lg:grid-cols-[1.05fr_1fr] gap-12 items-center">
+        <div>
+          <motion.span
+            className="chip bg-yellow mb-6"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
           >
-            See how it works ↓
-          </a>
+            <Gavel size={13} aria-hidden /> An AI jury for hackathons
+          </motion.span>
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[0.95] tracking-tight">
+            {["Judge every", "project like", "you read"].map((line, i) => (
+              <motion.span
+                key={line}
+                className="block"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1 + i * 0.1, ease: easeOut }}
+              >
+                {line}
+              </motion.span>
+            ))}
+            <motion.span
+              className="block"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4, ease: easeOut }}
+            >
+              <span className="relative inline-block">
+                every line.
+                <motion.svg
+                  viewBox="0 0 300 20"
+                  className="absolute -bottom-2 left-0 w-full h-4"
+                  preserveAspectRatio="none"
+                  aria-hidden
+                >
+                  <motion.path
+                    d="M3 14 Q 80 2 150 10 T 297 8"
+                    fill="none"
+                    stroke="var(--coral)"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 0.8, delay: 0.9, ease: easeOut }}
+                  />
+                </motion.svg>
+              </span>
+            </motion.span>
+          </h1>
+          <motion.p
+            className="mt-7 text-lg text-muted-foreground max-w-xl leading-relaxed"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+          >
+            Evalio clones each submission, reads the code, researches the market and checks the pitch against what was
+            actually built. Three specialised judges score your criteria with evidence; a head judge ranks them.
+          </motion.p>
+          <motion.div
+            className="mt-8 flex flex-wrap gap-3"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.75 }}
+          >
+            <Link href="/dashboard" className="btn btn-primary !min-h-12 !px-6 text-base">
+              Start a hackathon <ArrowRight size={18} />
+            </Link>
+            <a href="#how" className="btn !min-h-12 !px-6 text-base">See how it judges</a>
+          </motion.div>
         </div>
-      </BlurFade>
-      <BlurFade delay={0.4}>
-        <div className="mt-16 max-w-4xl mx-auto">
-          <BorderBeam>
-            <DashboardPreview />
-          </BorderBeam>
-        </div>
-      </BlurFade>
+
+        <motion.div style={{ y: cardY, rotate: cardRotate }} className="relative">
+          <HeroReport />
+        </motion.div>
+      </div>
     </section>
   );
 }
 
-function DashboardPreview() {
-  const cards = [
-    { color: "#90EE90", title: "DocuMind AI", status: "Analyzed", badge: "#90EE90" },
-    { color: "#A388EE", title: "PitchPerfect", status: "Analyzed", badge: "#90EE90" },
-    { color: "#FF7A5C", title: "GreenTrack", status: "Pending", badge: "#FFDB58" },
-    { color: "#87CEEB", title: "CodeMentor", status: "Analyzed", badge: "#90EE90" },
-    { color: "#FFB2EF", title: "FairTrade", status: "Flagged", badge: "#FF7A5C" },
-    { color: "#FFDB58", title: "MeshNet", status: "Analyzed", badge: "#90EE90" },
+function HeroReport() {
+  const criteria = [
+    { name: "Technical Execution", judge: "var(--sky)", score: 8.1 },
+    { name: "Innovation", judge: "var(--violet)", score: 7.4 },
+    { name: "Market Potential", judge: "var(--mint)", score: 6.8 },
+    { name: "Theme Alignment", judge: "var(--violet)", score: 8.6 },
   ];
   return (
-    <div className="rounded-[4px] bg-white text-left overflow-hidden" style={{ border: "2.5px solid #111", boxShadow: "6px 6px 0 #111" }}>
-      <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "2px solid #111", background: "#FFDB58" }}>
-        <span className="w-3 h-3 rounded-full" style={{ background: "#FF7A5C", border: "1.5px solid #111" }} />
-        <span className="w-3 h-3 rounded-full" style={{ background: "#FFDB58", border: "1.5px solid #111" }} />
-        <span className="w-3 h-3 rounded-full" style={{ background: "#90EE90", border: "1.5px solid #111" }} />
-        <span className="ml-3 text-xs font-medium">evalio.app/dashboard</span>
+    <motion.div
+      initial={{ opacity: 0, y: 40, rotate: 3 }}
+      animate={{ opacity: 1, y: 0, rotate: 1.5 }}
+      transition={{ type: "spring", stiffness: 120, damping: 16, delay: 0.3 }}
+      className="relative brutal-card !shadow-[var(--shadow-hard-xl)] p-6"
+      aria-label="Example verdict"
+    >
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <p className="eyebrow">Example verdict</p>
+          <p className="text-xl font-bold">GreenRoute</p>
+        </div>
+        <span className="chip bg-yellow num">Rank #1 of 42</span>
       </div>
-      <div className="grid grid-cols-3 gap-3 p-4" style={{ borderBottom: "2px solid #111" }}>
-        {[{ n: "24", l: "Projects" }, { n: "18", l: "Analyzed" }, { n: "6", l: "Pending" }].map((s) => (
-          <div key={s.l} className="rounded-[4px] p-3 bg-white" style={{ border: "2px solid #111", boxShadow: "3px 3px 0 #111" }}>
-            <div className="text-2xl font-extrabold">{s.n}</div>
-            <div className="text-[11px] text-neutral-600 font-medium uppercase tracking-wide">{s.l}</div>
-          </div>
-        ))}
+      <div className="flex gap-6 items-center">
+        <ScoreDial score={7.7} size={130} stroke={12} caption={false} />
+        <ul className="flex-1 space-y-2.5 min-w-0">
+          {criteria.map((c, i) => (
+            <li key={c.name}>
+              <div className="flex justify-between text-xs font-semibold mb-1">
+                <span className="truncate">{c.name}</span>
+                <span className="num">{c.score}</span>
+              </div>
+              <div className="h-2.5 rounded-full border-2 border-ink bg-muted overflow-hidden">
+                <motion.div
+                  className="h-full"
+                  style={{ background: c.judge }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${c.score * 10}%` }}
+                  transition={{ duration: 0.9, delay: 0.8 + i * 0.12, ease: easeOut }}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
-        {cards.map((c) => (
-          <div key={c.title} className="rounded-[4px] bg-white overflow-hidden" style={{ border: "2px solid #111", boxShadow: "3px 3px 0 #111" }}>
-            <div style={{ background: c.color, height: 7, borderBottom: "2px solid #111" }} />
-            <div className="p-3">
-              <div className="text-sm font-bold">{c.title}</div>
-              <span className="inline-block mt-2 px-2 py-0.5 text-[10px] font-bold rounded-[3px]" style={{ background: c.badge, border: "1.5px solid #111" }}>
-                {c.status}
-              </span>
-            </div>
-          </div>
+      <div className="mt-5 grid gap-2">
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.4 }} className="flex gap-2 items-start rounded-lg border-2 border-ink bg-mint/40 p-2.5 text-sm">
+          <CheckCircle2 size={16} className="shrink-0 mt-0.5" aria-hidden />
+          <span><strong>Claim verified:</strong> route optimisation in <code className="num text-xs">src/solver/vrp.py</code></span>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.6 }} className="flex gap-2 items-start rounded-lg border-2 border-ink bg-yellow/50 p-2.5 text-sm">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden />
+          <span>3 of 58 commits predate the hackathon start.</span>
+        </motion.div>
+      </div>
+      <motion.span
+        className="absolute -top-5 -left-5 chip bg-coral !text-sm !px-3 !py-1 rotate-[-8deg] shadow-[var(--shadow-hard-sm)]"
+        animate={{ y: [0, -6, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+      >
+        3 judges · 1 verdict
+      </motion.span>
+    </motion.div>
+  );
+}
+
+function Ticker() {
+  return (
+    <div className="border-y-2 border-ink bg-ink text-paper py-3 overflow-hidden" aria-label="What the jury checks">
+      <div className="flex w-max animate-marquee">
+        {[...CHECKS, ...CHECKS].map((c, i) => (
+          <span key={i} className="flex items-center gap-3 px-6 text-sm font-semibold whitespace-nowrap">
+            <span className="size-2 rounded-full bg-yellow" aria-hidden /> {c}
+          </span>
         ))}
       </div>
     </div>
   );
 }
 
-/* ── Stats strip ── */
-function StatsStrip() {
-  const stats = [
-    { v: 24, suffix: "+", l: "Projects analyzed per hackathon" },
-    { v: 4, suffix: "", l: "Specialized AI agents" },
-    { v: 100, suffix: "%", l: "Automated analysis" },
-  ];
+function Panel() {
   return (
-    <section className="w-full py-12 px-6" style={{ background: "#FFDB58", borderTop: "2.5px solid #111", borderBottom: "2.5px solid #111" }}>
-      <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-8 text-center">
-        {stats.map((s) => (
-          <BlurFade key={s.l}>
-            <div className="text-5xl font-extrabold">
-              <NumberTicker value={s.v} suffix={s.suffix} />
-            </div>
-            <div className="mt-2 text-sm font-bold">{s.l}</div>
-          </BlurFade>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ── How it works ── */
-function HowItWorks() {
-  const steps = [
-    { n: 1, t: "Submit a project", d: "Drop in a GitHub link and short description." },
-    { n: 2, t: "Agents analyze it", d: "Market, code, chat & search agents run in parallel." },
-    { n: 3, t: "Evalio with confidence", d: "Review structured insights and ask follow-ups." },
-  ];
-  return (
-    <section id="how" className="px-6 sm:px-10 py-20 max-w-6xl mx-auto">
-      <BlurFade>
-        <h2 className="text-3xl sm:text-4xl font-extrabold text-center">How it works</h2>
-      </BlurFade>
-      <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8">
-        {steps.map((s, i) => (
-          <BlurFade key={s.n} delay={0.1 * i}>
-            <div className="text-center px-4">
-              <div
-                className="mx-auto w-14 h-14 rounded-full flex items-center justify-center text-xl font-extrabold"
-                style={{ background: "#111", color: "#FFDB58", border: "2.5px solid #111", boxShadow: "4px 4px 0 #FFDB58" }}
-              >
-                {s.n}
-              </div>
-              <h3 className="mt-5 text-lg font-extrabold">{s.t}</h3>
-              <p className="mt-2 text-sm text-neutral-700">{s.d}</p>
-            </div>
-          </BlurFade>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ── Features ── */
-function Features() {
-  const cells = [
-    { color: "#90EE90", title: "Market Research Agent", desc: "Analyzes target market size, competitors, and uniqueness.", large: true, icon: <IconMarket /> },
-    { color: "#FFB2EF", title: "Code Analysis Agent", desc: "Scans full codebase for tech stack, quality, and rule compliance.", icon: <IconCode /> },
-    { color: "#A388EE", title: "Chat Agent", desc: "Interactive Q&A combining market + code insights.", icon: <IconChat /> },
-    { color: "#87CEEB", title: "Search Agent", desc: "Find any submission with plain-English semantic search.", large: true, icon: <IconSearch /> },
-  ];
-  return (
-    <section id="features" className="px-6 sm:px-10 py-20 max-w-6xl mx-auto">
-      <BlurFade>
-        <h2 id="agents" className="text-3xl sm:text-4xl font-extrabold text-center">Four agents. One verdict.</h2>
-        <p className="mt-3 text-center text-neutral-700 max-w-xl mx-auto">Every submission is reviewed by specialised AI agents working together.</p>
-      </BlurFade>
-      <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5">
-        {cells.map((c, i) => (
-          <BlurFade key={c.title} delay={0.08 * i} className={c.large ? "md:col-span-2" : "md:col-span-1"}>
-            <div className="rounded-[4px] bg-white overflow-hidden h-full" style={{ border: "2.5px solid #111", boxShadow: "4px 4px 0 #111" }}>
-              <div style={{ background: c.color, height: 7, borderBottom: "2.5px solid #111" }} />
-              <div className="p-6">
-                <div className="w-10 h-10 rounded-[4px] flex items-center justify-center mb-4" style={{ background: c.color, border: "2px solid #111" }}>
-                  {c.icon}
+    <section id="judges" className="px-4 sm:px-6 py-24 max-w-7xl mx-auto scroll-mt-16">
+      <Reveal className="max-w-2xl mb-12">
+        <p className="eyebrow mb-2">The panel</p>
+        <h2 className="text-4xl sm:text-5xl font-bold">Three judges. Each owns what it knows best.</h2>
+        <p className="text-muted-foreground mt-3 text-lg">
+          Your criteria are routed to the right judge — <em>Code Quality</em> to the Code Judge, <em>Market Potential</em> to
+          the Market Judge, <em>Innovation</em> and <em>UX</em> to the Product Judge — and weighted the way you set them.
+        </p>
+      </Reveal>
+      <div className="grid gap-6 md:grid-cols-3">
+        {JUDGES.map((j, i) => (
+          <Reveal key={j.name} delay={i * 0.1}>
+            <motion.article whileHover={{ y: -6, rotate: i === 1 ? 0 : i === 0 ? -1 : 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }} className="brutal-card overflow-hidden h-full">
+              <div className="p-6 border-b-2 border-ink" style={{ background: j.color }}>
+                <div className="size-12 rounded-xl border-2 border-ink bg-card flex items-center justify-center mb-4 shadow-[var(--shadow-hard-sm)]">
+                  <j.icon size={22} aria-hidden />
                 </div>
-                <h3 className="text-lg font-extrabold">{c.title}</h3>
-                <p className="mt-2 text-sm text-neutral-700">{c.desc}</p>
+                <h3 className="text-2xl font-bold">{j.name}</h3>
+                <p className="font-semibold mt-1">{j.tagline}</p>
               </div>
-            </div>
-          </BlurFade>
+              <ul className="p-6 space-y-2.5">
+                {j.points.map((p) => (
+                  <li key={p} className="flex gap-2.5 text-sm">
+                    <CheckCircle2 size={17} className="shrink-0 mt-0.5" aria-hidden /> {p}
+                  </li>
+                ))}
+              </ul>
+            </motion.article>
+          </Reveal>
         ))}
       </div>
-    </section>
-  );
-}
-
-/* ── Tech stack ── */
-function TechStack() {
-  return (
-    <section className="py-16">
-      <BlurFade>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-center mb-8">Built with</h2>
-      </BlurFade>
-      <Marquee>
-        {[...TECH, ...TECH].map((t, i) => (
-          <span key={`${t}-${i}`} className="px-4 py-2 text-sm font-bold bg-white rounded-[4px] whitespace-nowrap" style={{ border: "2px solid #111", boxShadow: "2px 2px 0 #111" }}>
-            {t}
-          </span>
-        ))}
-      </Marquee>
-    </section>
-  );
-}
-
-/* ── CTA banner ── */
-function CtaBanner() {
-  return (
-    <section className="w-full py-20 px-6 text-center" style={{ background: "#111" }}>
-      <BlurFade>
-        <h2 className="text-3xl sm:text-5xl font-extrabold text-white">Ready to Evalio smarter?</h2>
-        <p className="mt-4 text-base sm:text-lg font-medium" style={{ color: "#FFDB58" }}>Set up your hackathon in under 2 minutes.</p>
-        <div className="mt-8 flex justify-center">
-          <Link href="/dashboard">
-            <ShimmerButton>Get started free →</ShimmerButton>
-          </Link>
-        </div>
-      </BlurFade>
-    </section>
-  );
-}
-
-/* ── Footer ── */
-function Footer() {
-  return (
-    <footer className="bg-white px-6 sm:px-10 py-10" style={{ borderTop: "2.5px solid #111" }}>
-      <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 flex items-center justify-center font-extrabold rounded-[4px]" style={{ background: "#FFDB58", border: "2.5px solid #111", boxShadow: "3px 3px 0 #111" }}>E</div>
-          <div>
-            <div className="font-extrabold">Evalio</div>
-            <div className="text-xs text-neutral-600">Your trusted ally for hackathon judging.</div>
+      <Reveal delay={0.2}>
+        <div className="mt-6 brutal-card p-6 flex flex-col md:flex-row gap-6 items-start md:items-center bg-yellow">
+          <div className="size-12 rounded-xl border-2 border-ink bg-card flex items-center justify-center shrink-0 shadow-[var(--shadow-hard-sm)]">
+            <Gavel size={22} aria-hidden />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-2xl font-bold">…and a Head Judge</h3>
+            <p className="mt-1">
+              Combines the panel with a <strong>deterministic weighted average</strong> — no black-box final number — raises integrity
+              flags and writes the verdict each team receives.
+            </p>
           </div>
         </div>
-        <nav className="flex flex-wrap gap-5 text-sm font-medium">
-          <Link href="/dashboard" className="hover:underline">Dashboard</Link>
-          <Link href="/search" className="hover:underline">Search</Link>
-          <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:underline">GitHub</a>
-        </nav>
+      </Reveal>
+    </section>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <section id="how" className="border-y-2 border-ink bg-card scroll-mt-16">
+      <div className="px-4 sm:px-6 py-24 max-w-7xl mx-auto">
+        <Reveal className="text-center max-w-2xl mx-auto mb-14">
+          <p className="eyebrow mb-2">How it works</p>
+          <h2 className="text-4xl sm:text-5xl font-bold">From repo link to ranking in minutes</h2>
+        </Reveal>
+        <ol className="grid gap-6 md:grid-cols-4 relative">
+          <motion.span
+            className="hidden md:block absolute top-8 left-[12%] right-[12%] h-[3px] bg-ink origin-left"
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1.2, ease: easeOut }}
+            aria-hidden
+          />
+          {STEPS.map((s, i) => (
+            <Reveal key={s.title} delay={0.15 * i}>
+              <li className="relative text-center">
+                <div className="mx-auto size-16 rounded-2xl border-2 border-ink bg-yellow flex items-center justify-center shadow-[var(--shadow-hard)] relative">
+                  <s.icon size={26} aria-hidden />
+                  <span className="absolute -top-3 -right-3 num size-7 rounded-full bg-ink text-paper text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                </div>
+                <h3 className="text-lg font-bold mt-5">{s.title}</h3>
+                <p className="text-sm text-muted-foreground mt-1.5 max-w-[220px] mx-auto">{s.text}</p>
+              </li>
+            </Reveal>
+          ))}
+        </ol>
       </div>
-      <div className="max-w-6xl mx-auto mt-8 pt-6 text-xs text-neutral-600 text-center" style={{ borderTop: "1.5px solid #111" }}>
-        Built by Onlydevs · AI Hackathon Judging Platform
+    </section>
+  );
+}
+
+function Integrity() {
+  const stats = [
+    { value: 5, suffix: "", label: "evaluation stages per project" },
+    { value: 10, suffix: "+", label: "integrity & rule checks" },
+    { value: 100, suffix: "%", label: "of scores explained with evidence" },
+  ];
+  return (
+    <section className="px-4 sm:px-6 py-24 max-w-7xl mx-auto">
+      <div className="grid lg:grid-cols-2 gap-12 items-center">
+        <Reveal>
+          <p className="eyebrow mb-2">Fair by design</p>
+          <h2 className="text-4xl sm:text-5xl font-bold">A jury that shows its work</h2>
+          <p className="text-muted-foreground mt-4 text-lg leading-relaxed">
+            Every score links back to files, sources or measurements. Pre-built projects, leaked keys, dead demos and
+            copy-paste submissions are flagged before they reach the podium. Organisers can chat with the jury about any
+            project and re-run it at any time.
+          </p>
+          <div className="grid grid-cols-3 gap-3 mt-8">
+            {stats.map((s) => (
+              <div key={s.label} className="brutal-card p-4">
+                <div className="num text-3xl font-bold"><CountUp value={s.value} />{s.suffix}</div>
+                <div className="text-xs font-semibold text-muted-foreground mt-1">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+        <Reveal delay={0.15}>
+          <div className="brutal-card p-6 rotate-1 space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={18} aria-hidden />
+              <p className="font-bold">Integrity & rule checks</p>
+            </div>
+            {[
+              ["var(--coral)", "OpenAI API key appears hard-coded in server/config.js:12."],
+              ["var(--yellow)", "41 of 60 commits predate the hackathon start."],
+              ["var(--yellow)", "2 of 5 claimed features have no supporting code."],
+              ["var(--sky)", "Declared as React but the code uses Next.js, Tailwind CSS."],
+            ].map(([bg, text], i) => (
+              <motion.p
+                key={text}
+                initial={{ opacity: 0, x: 24 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.2 + i * 0.12, ease: easeOut }}
+                className="rounded-lg border-2 border-ink p-3 text-sm font-medium"
+                style={{ background: `color-mix(in srgb, ${bg} 40%, var(--card))` }}
+              >
+                {text}
+              </motion.p>
+            ))}
+            <div className="flex gap-2 items-start pt-2 text-sm text-muted-foreground">
+              <Quote size={16} className="shrink-0" aria-hidden />
+              <span>“Which claimed features are missing?” — ask the jury, get file references back.</span>
+            </div>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+function Cta() {
+  return (
+    <section className="px-4 sm:px-6 pb-24">
+      <Reveal>
+        <div className="max-w-5xl mx-auto rounded-3xl border-2 border-ink bg-ink text-paper p-10 sm:p-14 text-center relative overflow-hidden shadow-[10px_10px_0_var(--yellow)]">
+          <motion.div
+            className="absolute -top-16 -right-16 size-56 rounded-full border-2 border-paper/30"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+            style={{ borderStyle: "dashed" }}
+            aria-hidden
+          />
+          <h2 className="text-4xl sm:text-5xl font-bold relative">Your next hackathon deserves a real jury.</h2>
+          <p className="mt-4 text-lg text-paper/75 relative">Set your criteria in two minutes. The judges never get tired.</p>
+          <Link href="/dashboard" className="btn btn-primary !min-h-12 !px-7 text-base mt-8 relative">
+            Create a hackathon <ArrowRight size={18} />
+          </Link>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="border-t-2 border-ink bg-card">
+      <div className="px-4 sm:px-6 py-10 max-w-7xl mx-auto flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+        <div className="flex items-center gap-3">
+          <Logo />
+          <div>
+            <div className="font-bold">Evalio</div>
+            <div className="text-xs text-muted-foreground">The AI hackathon jury · built by Onlydevs</div>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground max-w-md">
+          Next.js · FastAPI · PostgreSQL job queue · ChromaDB code index · live web research · any OpenAI-compatible LLM
+        </p>
+        <nav className="flex gap-5 text-sm font-semibold" aria-label="Footer">
+          <Link href="/dashboard" className="hover:underline">Console</Link>
+          <Link href="/search" className="hover:underline">Search</Link>
+        </nav>
       </div>
     </footer>
   );
-}
-
-/* ── Icons ── */
-function IconMarket() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" /></svg>;
-}
-function IconCode() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>;
-}
-function IconChat() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
-}
-function IconSearch() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>;
 }
