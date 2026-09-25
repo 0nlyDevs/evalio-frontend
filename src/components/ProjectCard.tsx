@@ -1,111 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { ACCENT_COLORS } from "@/lib/constants";
-import { type Project, projectStatus } from "@/lib/api";
-import { extractScore } from "@/lib/utils";
-import { StatusBadge } from "./StatusBadge";
-import { ThemeBadge } from "./ThemeBadge";
+import { GitBranch } from "lucide-react";
+import { isEvaluating, type Project } from "@/lib/api";
+import { repoLabel, timeAgo } from "@/lib/utils";
+import { JudgeScores, ScorePill } from "./score";
+import { FlagCount, StatusPill } from "./status";
 
-interface ProjectCardProps {
-  project: Project;
-  index: number;
-  score?: number; // similarity score from search
-}
-
-function ScorePill({ score }: { score: number }) {
-  const color =
-    score >= 7.5 ? "var(--brand-mint)" : score >= 5 ? "var(--brand-mustard)" : "var(--brand-coral)";
-  return (
-    <span
-      className="text-[11px] font-medium px-2 py-0.5 rounded-[2px] shrink-0"
-      style={{ background: color, border: "1.5px solid var(--brand-ink)", color: "var(--brand-ink)" }}
-    >
-      {score.toFixed(1)}/10
-    </span>
-  );
-}
-
-export function ProjectCard({ project, index, score }: ProjectCardProps) {
-  const accent = ACCENT_COLORS[index % ACCENT_COLORS.length];
-  const status = projectStatus(project);
-  const num = String(index + 1).padStart(2, "0");
-  const analysisScore = extractScore(project);
-
-  const tags: string[] = [];
-  if (project.theme) tags.push(...project.theme.split(",").map((t) => t.trim()).filter(Boolean));
+export function ProjectCard({ project, match }: { project: Project; match?: number | null }) {
+  const evaluating = isEvaluating(project);
 
   return (
-    <Link
-      href={`/project/${project.project_id}`}
-      className="block bg-card border-brutal rounded-[4px] shadow-brutal-lg overflow-hidden press-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-xl transition-all"
-    >
-      <div className="h-1.5" style={{ background: accent }} />
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-2 gap-2">
-          <h3 className="text-sm font-medium leading-snug text-foreground line-clamp-2 flex-1">
-            {project.short_description}
-          </h3>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <span
-              className="text-[11px] font-medium text-muted-foreground px-1.5 py-0.5 rounded-[2px]"
-              style={{ background: "#f5f5f5", border: "1.5px solid #ddd" }}
-            >
-              #{num}
-            </span>
-            {analysisScore !== null && <ScorePill score={analysisScore} />}
-            {score !== undefined && (
-              <span
-                className="text-[10px] font-medium px-1.5 py-0.5 rounded-[2px]"
-                style={{ background: "var(--brand-sky)", border: "1.5px solid var(--brand-ink)", color: "var(--brand-ink)" }}
-              >
-                {Math.round(score * 100)}% match
-              </span>
-            )}
-          </div>
+    <Link href={`/project/${project.project_id}`} className="block brutal-card brutal-lift p-5 h-full">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="min-w-0">
+          <h3 className="font-bold text-base leading-snug line-clamp-1">{project.name}</h3>
+          <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">{project.short_description}</p>
         </div>
+        {project.overall_score !== null ? (
+          <ScorePill score={project.overall_score} className="shrink-0 text-sm" />
+        ) : null}
+      </div>
 
-        {project.long_description && (
-          <p className="text-xs text-muted-foreground leading-relaxed mb-3 line-clamp-2">
-            {project.long_description}
-          </p>
+      <div className="flex flex-wrap items-center gap-1.5 my-3">
+        <StatusPill status={project.status} />
+        {project.rank ? <span className="chip bg-yellow num">#{project.rank}</span> : null}
+        <FlagCount flags={project.flags ?? []} />
+        {match !== undefined && match !== null && (
+          <span className="chip bg-sky num">{Math.round(match * 100)}% match</span>
         )}
+      </div>
 
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {tags.slice(0, 3).map((t) => (
-              <ThemeBadge key={t} label={t} />
-            ))}
-          </div>
-        )}
-
-        <div
-          className="pt-2.5 flex items-center justify-between"
-          style={{ borderTop: "2px solid var(--brand-ink)" }}
-        >
-          <div className="flex gap-1.5">
-            <StatusBadge
-              label="Market"
-              status={(project.market_agent_analysis?.length ?? 0) > 0 ? "done" : "missing"}
-            />
-            <StatusBadge
-              label="Code"
-              status={(project.code_agent_analysis?.length ?? 0) > 0 ? "done" : "missing"}
-            />
-          </div>
-          <span
-            className="text-[11px] font-medium px-2.5 py-1 rounded-[2px]"
-            style={{ border: "1.5px solid var(--brand-ink)" }}
-          >
-            Open ↗
-          </span>
+      {!evaluating && project.overall_score !== null && (
+        <div className="pt-3 border-t-2 border-dashed border-ink/30">
+          <JudgeScores scores={project.judge_scores} compact />
         </div>
+      )}
 
-        {status === "pending" && (
-          <p className="mt-2 text-[10px] text-muted-foreground italic">
-            Agents working… results in 30–60s
-          </p>
-        )}
+      <div className="flex items-center justify-between gap-2 mt-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5 min-w-0">
+          <GitBranch size={13} aria-hidden className="shrink-0" />
+          <span className="truncate">{repoLabel(project.github_link).replace(/^github\.com\//, "")}</span>
+        </span>
+        <span className="shrink-0">{timeAgo(project.created_at)}</span>
       </div>
     </Link>
   );

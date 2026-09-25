@@ -1,114 +1,79 @@
 "use client";
 
 import Link from "next/link";
-import type { Hackathon } from "@/lib/api";
-import { hackathonId } from "@/lib/api";
+import { ArrowUpRight, CalendarClock, Users } from "lucide-react";
+import { splitList, type Hackathon } from "@/lib/api";
 import { ACCENT_COLORS } from "@/lib/constants";
+import { formatScore, timeUntil } from "@/lib/utils";
+import { PhaseBadge } from "./status";
 
-interface HackathonCardProps {
-  hackathon: Hackathon;
-  index: number;
-}
-
-export function HackathonCard({ hackathon, index }: HackathonCardProps) {
+export function HackathonCard({ hackathon, index }: { hackathon: Hackathon; index: number }) {
   const accent = ACCENT_COLORS[index % ACCENT_COLORS.length];
-  const id = hackathonId(hackathon);
-  const isOpen = hackathon.isAllowed ?? hackathon.is_allowed ?? false;
-
-  // Dev warning — helps catch API shape mismatches
-  if (process.env.NODE_ENV === "development" && id === undefined) {
-    console.warn("[HackathonCard] Could not resolve ID from hackathon object:", hackathon);
-  }
-
-  const themes = hackathon.theme?.split(",").map((t) => t.trim()).filter(Boolean) ?? [];
-  const criteria = hackathon.criteria?.split(",").map((t) => t.trim()).filter(Boolean) ?? [];
-
-  const deadline = hackathon.deadline ? new Date(hackathon.deadline) : null;
-  const isExpired = deadline ? deadline < new Date() : false;
-
-  if (id === undefined) {
-    return (
-      <div
-        className="block bg-card rounded-lg overflow-hidden opacity-50 cursor-not-allowed"
-        style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "5px 5px 0 var(--brand-ink)" }}
-        title="Hackathon ID missing — check API response"
-      >
-        <div className="h-1.5" style={{ background: accent }} />
-        <div className="p-5">
-          <p className="text-sm font-medium text-muted-foreground">Hackathon (ID unavailable)</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Check browser console for details.</p>
-        </div>
-      </div>
-    );
-  }
+  const themes = splitList(hackathon.theme);
+  const { projects = 0, evaluated = 0, in_progress = 0, top_score } = hackathon.stats ?? {};
+  const progress = projects ? evaluated / projects : 0;
 
   return (
     <Link
-      href={`/hackathon/${id}`}
-      className="block bg-card rounded-lg overflow-hidden press-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 transition-all"
-      style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "5px 5px 0 var(--brand-ink)" }}
+      href={`/hackathon/${hackathon.id}`}
+      className="group block brutal-card brutal-lift overflow-hidden h-full focus-visible:outline-offset-4"
     >
-      <div className="h-1.5" style={{ background: accent }} />
-      <div className="p-5">
-        {/* Title row */}
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <h3 className="text-base font-medium leading-snug flex-1">
-            {hackathon.name ?? `Hackathon #${id}`}
-          </h3>
-          <span
-            className="text-[10px] font-medium px-2 py-0.5 rounded-sm shrink-0"
-            style={{
-              background: isOpen && !isExpired ? "var(--brand-mint)" : "var(--brand-coral)",
-              border: "1.5px solid var(--brand-ink)",
-              color: "var(--brand-ink)",
-            }}
-          >
-            {isExpired ? "Expired" : isOpen ? "● Open" : "● Closed"}
-          </span>
-        </div>
-
-        {hackathon.description && (
-          <p className="text-xs text-muted-foreground leading-relaxed mb-3 line-clamp-2">
-            {hackathon.description}
-          </p>
-        )}
-
-        {/* Themes */}
-        {themes.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {themes.slice(0, 4).map((t) => (
-              <span
-                key={t}
-                className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm"
-                style={{ background: "var(--brand-pink)", border: "1.5px solid var(--brand-ink)", color: "var(--brand-ink)" }}
-              >
-                {t}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Footer */}
+      <div className="relative h-24 border-b-2 border-ink overflow-hidden" style={{ background: accent }}>
         <div
-          className="pt-3 flex items-center justify-between"
-          style={{ borderTop: "2px solid var(--brand-ink)" }}
-        >
-          <div className="text-[11px] text-muted-foreground">
-            {criteria.length > 0 ? `${criteria.length} criteria` : "No criteria set"}
-          </div>
-          {deadline && (
-            <div className="text-[11px] text-muted-foreground">
-              {isExpired ? "Ended" : "Ends"} {deadline.toLocaleDateString()}
-            </div>
-          )}
-          <span
-            className="text-[11px] font-medium px-2.5 py-1 rounded-sm"
-            style={{ border: "1.5px solid var(--brand-ink)" }}
-          >
-            View ↗
+          className="absolute inset-0 opacity-30"
+          style={{ backgroundImage: "repeating-linear-gradient(-45deg, var(--ink) 0 2px, transparent 2px 14px)" }}
+          aria-hidden
+        />
+        <div className="absolute left-4 bottom-3 right-4 flex items-end justify-between gap-2">
+          <PhaseBadge phase={hackathon.phase} />
+          <span className="size-9 rounded-full border-2 border-ink bg-card flex items-center justify-center transition-transform duration-200 group-hover:rotate-45">
+            <ArrowUpRight size={18} aria-hidden />
           </span>
         </div>
       </div>
+
+      <div className="p-5 flex flex-col gap-3">
+        <h3 className="text-lg font-bold leading-snug">{hackathon.name}</h3>
+        {hackathon.description && (
+          <p className="text-sm text-muted-foreground line-clamp-2">{hackathon.description}</p>
+        )}
+        {themes.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {themes.slice(0, 3).map((t) => (
+              <span key={t} className="chip">{t}</span>
+            ))}
+            {themes.length > 3 && <span className="chip bg-muted">+{themes.length - 3}</span>}
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-dashed border-ink/30">
+          <Stat label="Projects" value={String(projects)} icon={<Users size={13} aria-hidden />} />
+          <Stat label="Judged" value={`${Math.round(progress * 100)}%`} />
+          <Stat label="Top score" value={formatScore(top_score)} />
+        </div>
+
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <CalendarClock size={13} aria-hidden />
+            {hackathon.deadline ? timeUntil(hackathon.deadline) : "No deadline"}
+          </span>
+          {in_progress > 0 && (
+            <span className="flex items-center gap-1.5 font-semibold text-ink">
+              <span className="size-1.5 rounded-full bg-ink animate-pulse-dot" aria-hidden />
+              {in_progress} being judged
+            </span>
+          )}
+        </div>
+      </div>
     </Link>
+  );
+}
+
+function Stat({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+  return (
+    <div>
+      <div className="num text-lg font-bold flex items-center gap-1">{icon}{value}</div>
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">{label}</div>
+    </div>
   );
 }
