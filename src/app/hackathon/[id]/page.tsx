@@ -14,9 +14,9 @@ import { EmptyState, ErrorBanner } from "@/components/EmptyState";
 import { PhaseBadge } from "@/components/status";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { useHackathon, useLeaderboard, useUpdateHackathon } from "@/lib/hooks/useHackathons";
-import { isEvaluating, splitList, type Criterion, type Project } from "@/lib/api";
+import { isEvaluating, splitList, type Criterion, type Hackathon, type Project } from "@/lib/api";
 import { JUDGE_COLORS } from "@/lib/constants";
-import { formatDate, timeUntil } from "@/lib/utils";
+import { formatDate, formatScore, timeUntil } from "@/lib/utils";
 
 type Tab = "leaderboard" | "submissions";
 type Filter = "all" | "judged" | "evaluating" | "flagged";
@@ -75,7 +75,7 @@ export default function HackathonPage() {
                 <TagGroup label="Expected tech" tags={splitList(hackathon.technologies)} />
               </div>
             </div>
-            <div className="flex flex-row lg:flex-col gap-2 shrink-0 relative">
+            <div className="flex flex-row flex-wrap lg:flex-col gap-2 shrink-0 relative lg:w-60">
               <button className="btn btn-primary" onClick={() => setAddOpen(true)} disabled={!canSubmit}>
                 <Plus size={16} /> Submit project
               </button>
@@ -95,6 +95,7 @@ export default function HackathonPage() {
                 {hackathon.isAllowed ? <Lock size={16} /> : <LockOpen size={16} />}
                 {hackathon.isAllowed ? "Close submissions" : "Open submissions"}
               </button>
+              <HeaderStats stats={hackathon.stats} />
             </div>
           </div>
           <CriteriaWeights criteria={hackathon.criteria_config} />
@@ -169,6 +170,25 @@ function Shell({ children }: { children: React.ReactNode }) {
       <Topbar />
       <main id="main" className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">{children}</main>
     </div>
+  );
+}
+
+function HeaderStats({ stats }: { stats: Hackathon["stats"] }) {
+  const items: [string, string][] = [
+    ["Submissions", String(stats.projects ?? 0)],
+    ["Judged", String(stats.evaluated ?? 0)],
+    ["Top score", formatScore(stats.top_score)],
+    ["Average", formatScore(stats.avg_score)],
+  ];
+  return (
+    <dl className="grid grid-cols-2 gap-2 w-full mt-1">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-lg border-2 border-ink bg-card px-3 py-2">
+          <dd className="num text-lg font-bold leading-tight">{value}</dd>
+          <dt className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">{label}</dt>
+        </div>
+      ))}
+    </dl>
   );
 }
 
