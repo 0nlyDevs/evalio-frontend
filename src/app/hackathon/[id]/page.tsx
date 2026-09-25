@@ -1,338 +1,272 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft, CalendarClock, Inbox, Lock, LockOpen, Plus, Search, Trophy } from "lucide-react";
+import { toast } from "sonner";
 import { Topbar } from "@/components/Topbar";
 import { ProjectCard } from "@/components/ProjectCard";
 import { AddProjectModal } from "@/components/AddProjectModal";
-import { useHackathon, useHackathonProjects } from "@/lib/hooks/useHackathons";
-import { projectStatus } from "@/lib/api";
-import type { ProjectStatus } from "@/lib/constants";
-import { EmptyState } from "@/components/EmptyState";
-import { Inbox } from "lucide-react";
+import { LeaderboardTable, Podium } from "@/components/Leaderboard";
+import { EmptyState, ErrorBanner } from "@/components/EmptyState";
+import { PhaseBadge } from "@/components/status";
+import { Stagger, StaggerItem } from "@/components/motion";
+import { useHackathon, useLeaderboard, useUpdateHackathon } from "@/lib/hooks/useHackathons";
+import { isEvaluating, splitList, type Criterion, type Project } from "@/lib/api";
+import { JUDGE_COLORS } from "@/lib/constants";
+import { formatDate, timeUntil } from "@/lib/utils";
 
-type SortKey = "latest" | "status";
+type Tab = "leaderboard" | "submissions";
+type Filter = "all" | "judged" | "evaluating" | "flagged";
 
 export default function HackathonPage() {
   const params = useParams();
   const id = params?.id as string;
+  const { data: hackathon, isLoading, error } = useHackathon(id);
+  const { data: projects = [], isLoading: loadingProjects, error: projectsError, refetch } = useLeaderboard(id);
+  const update = useUpdateHackathon(id);
+  const [tab, setTab] = useState<Tab>("leaderboard");
+  const [addOpen, setAddOpen] = useState(false);
 
-  const { data: hackathon, isLoading: loadingHackathon } = useHackathon(id);
-  const { data: projects = [], isLoading: loadingProjects, error, refetch } = useHackathonProjects(id);
+  const evaluating = projects.filter(isEvaluating).length;
+  const ranked = projects.filter((p) => p.overall_score !== null);
 
-  const [filter, setFilter] = useState<ProjectStatus>("all");
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortKey>("latest");
-  const [addModalOpen, setAddModalOpen] = useState(false);
+  if (error) {
+    return (
+      <Shell>
+        <EmptyState icon={Trophy} title="Hackathon not found" description={(error as Error).message} action={<Link href="/dashboard" className="btn">Back to hackathons</Link>} />
+      </Shell>
+    );
+  }
 
-  const filtered = useMemo(() => {
-    let out = projects;
-    if (filter !== "all") out = out.filter((p) => projectStatus(p) === filter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      out = out.filter(
-        (p) =>
-          p.short_description?.toLowerCase().includes(q) ||
-          p.long_description?.toLowerCase().includes(q) ||
-          p.theme?.toLowerCase().includes(q),
-      );
-    }
-    if (sort === "status") {
-      const order = { analyzed: 0, flagged: 1, pending: 2 };
-      out = [...out].sort((a, b) => order[projectStatus(a)] - order[projectStatus(b)]);
-    }
-    return out;
-  }, [projects, filter, search, sort]);
-
-  const stats = useMemo(() => {
-    const total = projects.length;
-    const analyzed = projects.filter((p) => projectStatus(p) === "analyzed").length;
-    const pending = projects.filter((p) => projectStatus(p) === "pending").length;
-    const reviewed = projects.filter((p) => p.is_reviewed).length;
-    return { total, analyzed, pending, reviewed };
-  }, [projects]);
-
-  const themes = hackathon?.theme?.split(",").map((t) => t.trim()).filter(Boolean) ?? [];
-  const criteria = hackathon?.criteria?.split(",").map((t) => t.trim()).filter(Boolean) ?? [];
-  const deadline = hackathon?.deadline ? new Date(hackathon.deadline) : null;
-  const isExpired = deadline ? deadline < new Date() : false;
-  const isOpen = hackathon?.isAllowed ?? hackathon?.is_allowed ?? false;
+  const canSubmit = hackathon?.phase === "open" || hackathon?.phase === "upcoming";
 
   return (
-    <div className="min-h-screen">
-      <Topbar submissionsOpen={isOpen} />
+    <Shell>
+      <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-sm font-semibold mb-5 hover:underline">
+        <ArrowLeft size={15} /> All hackathons
+      </Link>
 
-      <main className="px-4 sm:px-7 py-6 max-w-7xl mx-auto">
-        {/* Breadcrumb */}
-        <Link href="/" className="text-xs text-muted-foreground hover:underline mb-4 inline-block">
-          ← All hackathons
-        </Link>
-
-        {/* Hackathon header */}
-        {loadingHackathon ? (
-          <div className="h-24 bg-card rounded-lg animate-pulse mb-6"
-            style={{ border: "2.5px solid var(--brand-ink)" }} />
-        ) : hackathon ? (
-          <div
-            className="bg-card rounded-lg p-5 mb-6"
-            style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "5px 5px 0 var(--brand-ink)" }}
-          >
-            <div className="flex items-start justify-between gap-4 flex-wrap mb-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h1 className="text-xl font-medium">{hackathon.name ?? `Hackathon #${id}`}</h1>
-                  <span
-                    className="text-[10px] font-medium px-2 py-0.5 rounded-sm"
-                    style={{
-                      background: isOpen && !isExpired ? "var(--brand-mint)" : "var(--brand-coral)",
-                      border: "1.5px solid var(--brand-ink)",
-                      color: "var(--brand-ink)",
-                    }}
-                  >
-                    {isExpired ? "Expired" : isOpen ? "● Open" : "● Closed"}
+      {isLoading || !hackathon ? (
+        <div className="brutal-card p-6 space-y-3 mb-8">
+          <div className="h-8 w-1/2 skeleton" />
+          <div className="h-4 w-3/4 skeleton" />
+          <div className="h-12 w-full skeleton" />
+        </div>
+      ) : (
+        <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="brutal-card p-6 sm:p-8 mb-8 relative overflow-hidden">
+          <div className="absolute -right-10 -top-10 size-40 rounded-full border-2 border-ink bg-yellow hidden sm:block" aria-hidden />
+          <div className="relative flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+            <div className="min-w-0 max-w-3xl">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <PhaseBadge phase={hackathon.phase} />
+                {hackathon.deadline && (
+                  <span className="chip bg-card">
+                    <CalendarClock size={12} aria-hidden /> {formatDate(hackathon.deadline, true)} · {timeUntil(hackathon.deadline)}
                   </span>
-                </div>
-                {hackathon.description && (
-                  <p className="text-sm text-muted-foreground">{hackathon.description}</p>
                 )}
               </div>
-              {deadline && (
-                <div className="text-right shrink-0">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Deadline</p>
-                  <p className="text-sm font-medium">{deadline.toLocaleDateString()}</p>
-                </div>
-              )}
+              <h1 className="text-3xl sm:text-4xl font-bold mb-2">{hackathon.name}</h1>
+              {hackathon.description && <p className="text-muted-foreground leading-relaxed">{hackathon.description}</p>}
+              <div className="flex flex-wrap gap-4 mt-4">
+                <TagGroup label="Themes" tags={splitList(hackathon.theme)} />
+                <TagGroup label="Expected tech" tags={splitList(hackathon.technologies)} />
+              </div>
             </div>
-
-            <div className="flex flex-wrap gap-4">
-              {themes.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Themes</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {themes.map((t) => (
-                      <span key={t} className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm"
-                        style={{ background: "var(--brand-pink)", border: "1.5px solid var(--brand-ink)", color: "var(--brand-ink)" }}>
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {criteria.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Criteria</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {criteria.map((c) => (
-                      <span key={c} className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm"
-                        style={{ background: "var(--brand-mint)", border: "1.5px solid var(--brand-ink)", color: "var(--brand-ink)" }}>
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+            <div className="flex flex-row lg:flex-col gap-2 shrink-0 relative">
+              <button className="btn btn-primary" onClick={() => setAddOpen(true)} disabled={!canSubmit}>
+                <Plus size={16} /> Submit project
+              </button>
+              <button
+                className="btn"
+                disabled={update.isPending}
+                onClick={() =>
+                  update.mutate(
+                    { isAllowed: !hackathon.isAllowed },
+                    {
+                      onSuccess: () => toast.success(hackathon.isAllowed ? "Submissions closed" : "Submissions opened"),
+                      onError: (e) => toast.error((e as Error).message),
+                    },
+                  )
+                }
+              >
+                {hackathon.isAllowed ? <Lock size={16} /> : <LockOpen size={16} />}
+                {hackathon.isAllowed ? "Close submissions" : "Open submissions"}
+              </button>
             </div>
           </div>
-        ) : null}
+          <CriteriaWeights criteria={hackathon.criteria_config} />
+        </motion.section>
+      )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <StatCard label="Total" value={stats.total} sub="submissions" onClick={() => setFilter("all")} active={filter === "all"} />
-          <StatCard label="Analyzed" value={stats.analyzed}
-            sub={stats.total ? `${Math.round((stats.analyzed / stats.total) * 100)}%` : "—"}
-            color="var(--brand-mint)" onClick={() => setFilter("analyzed")} active={filter === "analyzed"} />
-          <StatCard label="Pending" value={stats.pending} sub="awaiting agents"
-            color="var(--brand-coral)" onClick={() => setFilter("pending")} active={filter === "pending"} />
-          <StatCard label="Reviewed" value={stats.reviewed}
-            sub={stats.total ? `${Math.round((stats.reviewed / stats.total) * 100)}%` : "—"}
-            color="var(--brand-purple)" />
-        </div>
+      <AnimatePresence>
+        {evaluating > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-center gap-3 rounded-xl border-2 border-ink bg-sky px-4 py-3 mb-6 font-semibold text-sm" role="status">
+              <span className="size-2 rounded-full bg-ink animate-pulse-dot" aria-hidden />
+              The jury is evaluating {evaluating} submission{evaluating > 1 ? "s" : ""} — the ranking updates live.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 mb-4">
-          <div className="relative flex-1 min-w-0 sm:max-w-sm">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
-              fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-              <circle cx="11" cy="11" r="7" />
-              <path d="m21 21-4.3-4.3" strokeLinecap="round" />
-            </svg>
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search projects..."
-              className="w-full text-sm pl-9 pr-3 py-2 rounded-md bg-white outline-none"
-              style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }} />
-          </div>
-
-          <div className="flex gap-2 flex-wrap">
-            {FILTERS.map((f) => {
-              const sel = filter === f.key;
-              return (
-                <button key={f.key} onClick={() => setFilter(f.key)}
-                  className="text-xs font-medium px-3.5 py-1.5 rounded-md press-brutal"
-                  style={{
-                    background: sel ? "var(--brand-ink)" : "white",
-                    color: sel ? "var(--brand-yellow)" : "var(--brand-ink)",
-                    border: "2.5px solid var(--brand-ink)",
-                    boxShadow: "3px 3px 0 var(--brand-ink)",
-                  }}>
-                  {f.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center gap-2 sm:ml-auto">
-            <SortDropdown value={sort} onChange={setSort} />
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <div role="tablist" aria-label="View" className="inline-flex rounded-full border-2 border-ink bg-card p-1 shadow-[var(--shadow-hard-sm)]">
+          {(["leaderboard", "submissions"] as Tab[]).map((t) => (
             <button
-              onClick={() => setAddModalOpen(true)}
-              disabled={isExpired || !isOpen}
-              className="text-sm font-medium px-4 py-2 rounded-md press-brutal disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none"
-              style={{
-                background: "var(--brand-coral)", color: "var(--brand-ink)",
-                border: "2.5px solid var(--brand-ink)", boxShadow: "4px 4px 0 var(--brand-ink)",
-              }}
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className="relative px-4 py-1.5 text-sm font-semibold rounded-full capitalize"
             >
-              + Add project
-            </button>
-          </div>
-        </div>
-
-        {/* Section label */}
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-medium pb-1 inline-block"
-            style={{ borderBottom: "3px solid var(--brand-ink)" }}>
-            Projects ({filtered.length})
-          </span>
-        </div>
-
-        {error && (
-          <div className="p-4 rounded-lg text-sm mb-4 bg-card flex items-center justify-between"
-            style={{ border: "2.5px solid var(--destructive)", boxShadow: "4px 4px 0 var(--destructive)" }}>
-            <span>Couldn&apos;t load projects: {(error as Error).message}</span>
-            <button onClick={() => refetch()}
-              className="text-xs font-medium px-3 py-1 rounded-sm press-brutal ml-4 shrink-0"
-              style={{ border: "1.5px solid var(--destructive)", color: "var(--destructive)" }}>
-              Retry
-            </button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {loadingProjects
-            ? Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)
-            : filtered.map((p, i) => <ProjectCard key={p.project_id} project={p} index={i} />)}
-        </div>
-
-        {!loadingProjects && filtered.length === 0 && !error && (
-          <EmptyState
-            icon={Inbox}
-            title="No projects yet"
-            description="Add the first submission to this hackathon and let the AI agents analyze it."
-            action={{ label: "+ Add first project", onClick: () => setAddModalOpen(true) }}
-          />
-        )}
-      </main>
-
-      <AddProjectModal open={addModalOpen} onClose={() => setAddModalOpen(false)} hackathonId={id} />
-    </div>
-  );
-}
-
-const FILTERS: { key: ProjectStatus; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "analyzed", label: "Analyzed" },
-  { key: "pending", label: "Pending" },
-  { key: "flagged", label: "Flagged" },
-];
-
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: "latest", label: "Latest" },
-  { key: "status", label: "Status" },
-];
-
-function StatCard({ label, value, sub, color, onClick, active }: {
-  label: string; value: number | string; sub: string;
-  color?: string; onClick?: () => void; active?: boolean;
-}) {
-  return (
-    <button onClick={onClick}
-      className="bg-card p-4 rounded-lg text-left w-full press-brutal"
-      style={{
-        border: `2.5px solid ${color ?? "var(--brand-ink)"}`,
-        boxShadow: active ? `6px 6px 0 ${color ?? "var(--brand-ink)"}` : `4px 4px 0 ${color ?? "var(--brand-ink)"}`,
-        outline: active ? `2px solid ${color ?? "var(--brand-ink)"}` : "none",
-        outlineOffset: "2px",
-      }}>
-      <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-2xl font-medium" style={{ color: color ?? "var(--brand-ink)" }}>{value}</div>
-      <div className="text-[11px] text-muted-foreground mt-1">{sub}</div>
-    </button>
-  );
-}
-
-function SortDropdown({ value, onChange }: { value: SortKey; onChange: (k: SortKey) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const current = SORTS.find((s) => s.key === value)!;
-
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-md press-brutal"
-        style={{ background: "white", border: "2px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)", color: "var(--brand-ink)", minWidth: "110px" }}>
-        <span className="flex-1 text-left">↕ {current.label}</span>
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
-          style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
-          <path d="M1 3l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-md overflow-hidden"
-          style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "4px 4px 0 var(--brand-ink)", minWidth: "130px" }}>
-          {SORTS.map((s, i) => (
-            <button key={s.key} onClick={() => { onChange(s.key); setOpen(false); }}
-              className="w-full text-left text-xs font-medium px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-[#F4D738]"
-              style={{ borderTop: i > 0 ? "1.5px solid var(--brand-ink)" : "none", background: value === s.key ? "#F4D738" : "white", color: "var(--brand-ink)" }}>
-              {s.label}
-              {value === s.key && <span className="text-[10px]">✓</span>}
+              {tab === t && <motion.span layoutId="tab-pill" className="absolute inset-0 rounded-full bg-ink" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
+              <span className="relative" style={{ color: tab === t ? "var(--paper)" : undefined }}>
+                {t} {t === "submissions" && <span className="num opacity-70">({projects.length})</span>}
+              </span>
             </button>
           ))}
         </div>
+      </div>
+
+      {projectsError && <ErrorBanner message={(projectsError as Error).message} onRetry={() => refetch()} />}
+
+      {loadingProjects ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 skeleton" />)}
+        </div>
+      ) : projects.length === 0 ? (
+        <EmptyState
+          icon={Inbox}
+          title="No submissions yet"
+          description={canSubmit ? "Submit the first project — the jury starts judging within seconds." : "Open submissions to start receiving projects."}
+          action={canSubmit ? <button className="btn btn-primary" onClick={() => setAddOpen(true)}><Plus size={16} /> Submit a project</button> : undefined}
+        />
+      ) : tab === "leaderboard" ? (
+        <div className="space-y-10">
+          {ranked.length > 0 && <Podium projects={projects} />}
+          <LeaderboardTable projects={projects} criteria={hackathon?.criteria_config ?? []} />
+        </div>
+      ) : (
+        <Submissions projects={projects} />
       )}
+
+      <AddProjectModal open={addOpen} onClose={() => setAddOpen(false)} hackathonId={id} />
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-dvh">
+      <Topbar />
+      <main id="main" className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">{children}</main>
     </div>
   );
 }
 
-function CardSkeleton() {
+function TagGroup({ label, tags }: { label: string; tags: string[] }) {
+  if (!tags.length) return null;
   return (
-    <div className="bg-card rounded-lg overflow-hidden"
-      style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "5px 5px 0 var(--brand-ink)" }}>
-      <div className="h-1.5 bg-neutral-200 animate-pulse" />
-      <div className="p-4 space-y-3">
-        <div className="flex justify-between gap-2">
-          <div className="h-4 bg-neutral-200 rounded animate-pulse flex-1" />
-          <div className="h-4 w-8 bg-neutral-100 rounded animate-pulse" />
+    <div>
+      <p className="eyebrow mb-1.5">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {tags.map((t) => <span key={t} className="chip">{t}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function CriteriaWeights({ criteria }: { criteria: Criterion[] }) {
+  const total = criteria.reduce((s, c) => s + c.weight, 0) || 1;
+  return (
+    <div className="relative mt-6 pt-5 border-t-2 border-dashed border-ink/30">
+      <p className="eyebrow mb-2">How projects are scored</p>
+      <div className="flex h-9 rounded-lg border-2 border-ink overflow-hidden">
+        {criteria.map((c, i) => (
+          <motion.div
+            key={c.name}
+            className="h-full flex items-center justify-center text-xs font-bold px-2 border-r-2 border-ink last:border-r-0 overflow-hidden"
+            style={{ background: JUDGE_COLORS[c.judge] }}
+            initial={{ width: 0 }}
+            animate={{ width: `${(c.weight / total) * 100}%` }}
+            transition={{ duration: 0.8, delay: 0.1 + i * 0.08, ease: [0.22, 1, 0.36, 1] }}
+            title={`${c.name} — ${Math.round((c.weight / total) * 100)}%`}
+          >
+            <span className="truncate">{c.name} <span className="num opacity-70">{Math.round((c.weight / total) * 100)}%</span></span>
+          </motion.div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-3 mt-2 text-xs font-semibold">
+        {(["code", "market", "product"] as const).map((j) => (
+          <span key={j} className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded-full border-[1.5px] border-ink" style={{ background: JUDGE_COLORS[j] }} aria-hidden />
+            {j === "code" ? "Code Judge" : j === "market" ? "Market Judge" : "Product Judge"}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Submissions({ projects }: { projects: Project[] }) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    return [...projects]
+      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+      .filter((p) =>
+        filter === "all" ? true
+          : filter === "judged" ? p.overall_score !== null && !isEvaluating(p)
+          : filter === "evaluating" ? isEvaluating(p)
+          : p.flags.some((f) => f.level !== "info"),
+      )
+      .filter((p) => !q || [p.name, p.short_description, p.long_description, p.github_link].some((v) => v?.toLowerCase().includes(q)));
+  }, [projects, filter, query]);
+
+  const FILTERS: { key: Filter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "judged", label: "Judged" },
+    { key: "evaluating", label: "In progress" },
+    { key: "flagged", label: "Flagged" },
+  ];
+
+  return (
+    <div>
+      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <label htmlFor="filter-q" className="sr-only">Filter submissions</label>
+          <input id="filter-q" className="field pl-9" placeholder="Filter by name, description or repo…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <div className="h-3 bg-neutral-100 rounded animate-pulse w-full" />
-        <div className="h-3 bg-neutral-100 rounded animate-pulse w-5/6" />
-        <div className="h-px bg-neutral-200 animate-pulse" />
-        <div className="flex justify-between">
-          <div className="flex gap-1.5">
-            <div className="h-5 w-16 bg-neutral-200 rounded animate-pulse" />
-            <div className="h-5 w-16 bg-neutral-200 rounded animate-pulse" />
-          </div>
-          <div className="h-5 w-14 bg-neutral-100 rounded animate-pulse" />
+        <div className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <button key={f.key} onClick={() => setFilter(f.key)} className={`btn btn-sm ${filter === f.key ? "btn-dark" : ""}`} aria-pressed={filter === f.key}>
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
+      {filtered.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-10 text-center">No submissions match this filter.</p>
+      ) : (
+        <Stagger key={filter} className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((p) => (
+            <StaggerItem key={p.project_id}>
+              <ProjectCard project={p} />
+            </StaggerItem>
+          ))}
+        </Stagger>
+      )}
     </div>
   );
 }
