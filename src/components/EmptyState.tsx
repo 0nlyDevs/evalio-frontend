@@ -1,53 +1,37 @@
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 interface EmptyStateProps {
   icon: LucideIcon;
-  iconColor?: string;
   title: string;
   description?: string;
-  action?: {
-    label: string;
-    onClick: () => void;
-  };
+  action?: ReactNode;
+  tone?: string;
 }
 
-export function EmptyState({ icon: Icon, iconColor, title, description, action }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action, tone = "var(--yellow)" }: EmptyStateProps) {
   return (
-    <div
-      className="flex flex-col items-center justify-center py-16 px-6 rounded-lg bg-card text-center"
-      style={{ border: "2.5px dashed var(--brand-ink)" }}
-    >
+    <div className="flex flex-col items-center justify-center text-center py-16 px-6 rounded-2xl border-2 border-dashed border-ink bg-card/70">
       <div
-        className="w-16 h-16 flex items-center justify-center mb-4 rounded-lg"
-        style={{
-          background: "#F4D738",
-          border: "2.5px solid var(--brand-ink)",
-          boxShadow: "4px 4px 0 var(--brand-ink)",
-        }}
+        className="size-16 flex items-center justify-center mb-5 rounded-xl border-2 border-ink shadow-[var(--shadow-hard)] -rotate-3"
+        style={{ background: tone }}
       >
-        <Icon size={28} color={iconColor ?? "var(--brand-ink)"} strokeWidth={2} />
+        <Icon size={28} strokeWidth={2.2} aria-hidden />
       </div>
+      <p className="text-lg font-bold mb-1">{title}</p>
+      {description && <p className="text-sm text-muted-foreground max-w-sm mb-6">{description}</p>}
+      {action}
+    </div>
+  );
+}
 
-      <p className="text-base font-medium mb-1">{title}</p>
-
-      {description && (
-        <p className="text-xs text-muted-foreground max-w-xs leading-relaxed mb-5">
-          {description}
-        </p>
-      )}
-
-      {action && (
-        <button
-          onClick={action.onClick}
-          className="text-sm font-medium px-5 py-2 rounded-md press-brutal"
-          style={{
-            background: "var(--brand-coral)",
-            color: "var(--brand-ink)",
-            border: "2.5px solid var(--brand-ink)",
-            boxShadow: "4px 4px 0 var(--brand-ink)",
-          }}
-        >
-          {action.label}
+export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div role="alert" className="flex items-center justify-between gap-4 rounded-xl border-2 border-ink bg-coral/40 px-4 py-3 text-sm font-medium">
+      <span>{message}</span>
+      {onRetry && (
+        <button className="btn btn-sm shrink-0" onClick={onRetry}>
+          Retry
         </button>
       )}
     </div>

@@ -1,54 +1,43 @@
 import type { Metadata } from "next";
-import { Rubik } from "next/font/google";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { QueryProvider } from "@/components/providers";
 import { ToastNotification } from "@/components/ToastNotification";
-import { PageTransition } from "@/components/PageTransition";
 import { GlobalProgressBar } from "@/components/GlobalProgressBar";
-import { StaleIndicator } from "@/components/StaleIndicator";
-import { FlickeringGrid } from "@/registry/magicui/flickering-grid";
 import "./globals.css";
 
-const rubik = Rubik({
+const grotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-grotesk",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Evalio — AI hackathon judging panel",
-  description: "AI-powered hackathon project analysis & judging.",
-  icons: {
-    icon: "/evalio.svg",
-    shortcut: "/evalio.svg",
-    apple: "/evalio.svg",
-  },
+  title: "Evalio — the AI hackathon jury",
+  description:
+    "Three AI judges read the code, research the market and test the product of every hackathon submission, then rank them with evidence.",
+  icons: { icon: "/evalio.svg", shortcut: "/evalio.svg", apple: "/evalio.svg" },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="bg-background">
-      <body className={`${rubik.variable} min-h-screen`}>
-        <FlickeringGrid
-          className="fixed inset-0 z-0 size-full"
-          squareSize={3}
-          gridGap={5}
-          color="#6B7280"
-          maxOpacity={0.25}
-          flickerChance={0.1}
-        />
+    <html lang="en" className={`${grotesk.variable} ${mono.variable}`}>
+      <body className="min-h-dvh">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] btn btn-primary"
+        >
+          Skip to content
+        </a>
         <QueryProvider>
-          <div className="relative z-10">
-            <GlobalProgressBar />
-            <StaleIndicator />
-            <PageTransition>
-              {children}
-            </PageTransition>
-            <ToastNotification />
-          </div>
+          <GlobalProgressBar />
+          {children}
+          <ToastNotification />
         </QueryProvider>
       </body>
     </html>
