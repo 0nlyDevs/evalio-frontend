@@ -1,61 +1,28 @@
+"use client";
+
 import { useState } from "react";
 import type { QAItem } from "@/lib/api";
-import { Clock } from "lucide-react";
 
-interface QAAccordionProps {
-  items: QAItem[];
-  accent?: string;
-}
-
-export function QAAccordion({ items, accent = "var(--brand-mint)" }: QAAccordionProps) {
-  const [openIdx, setOpenIdx] = useState<number | null>(0);
-
-  if (!items.length) {
-    return (
-      <div
-        className="flex items-center gap-3 px-4 py-5 rounded-lg"
-        style={{ border: "2px dashed #ccc", background: "#fafafa" }}
-      >
-        <Clock size={18} strokeWidth={2} color="var(--brand-ink)" className="shrink-0" />
-        <div>
-          <p className="text-xs font-medium text-foreground">Analysis pending</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Agents are working on it — results appear automatically.
-          </p>
-        </div>
-      </div>
-    );
-  }
+/** Renders reports produced by the previous version of the jury (question/answer lists). */
+export function QAAccordion({ items }: { items: QAItem[] }) {
+  const [open, setOpen] = useState<number | null>(0);
+  if (!items.length) return <p className="text-sm text-muted-foreground">No answers recorded.</p>;
 
   return (
-    <div className="space-y-2.5">
-      {items.map((item, i) => {
-        const open = openIdx === i;
-        return (
-          <div
-            key={i}
-            className="bg-card rounded-[4px] overflow-hidden"
-            style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "4px 4px 0 var(--brand-ink)" }}
+    <div className="space-y-2">
+      {items.map((item, i) => (
+        <div key={i} className="rounded-xl border-2 border-ink bg-card overflow-hidden">
+          <button
+            onClick={() => setOpen(open === i ? null : i)}
+            className="w-full flex justify-between gap-3 px-4 py-3 text-left text-sm font-semibold"
+            aria-expanded={open === i}
           >
-            <button
-              onClick={() => setOpenIdx(open ? null : i)}
-              className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium"
-              style={{ background: open ? accent : "transparent" }}
-            >
-              <span className="flex-1">{item.question}</span>
-              <span className="text-base">{open ? "−" : "+"}</span>
-            </button>
-            {open && (
-              <div
-                className="px-4 py-3 text-xs leading-relaxed text-foreground"
-                style={{ borderTop: "2px solid var(--brand-ink)" }}
-              >
-                {item.answer}
-              </div>
-            )}
-          </div>
-        );
-      })}
+            {item.question}
+            <span aria-hidden>{open === i ? "−" : "+"}</span>
+          </button>
+          {open === i && <p className="px-4 pb-4 text-sm leading-relaxed border-t-2 border-dashed border-ink/30 pt-3">{item.answer}</p>}
+        </div>
+      ))}
     </div>
   );
 }

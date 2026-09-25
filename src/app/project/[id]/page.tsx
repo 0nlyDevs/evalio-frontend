@@ -1,238 +1,368 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Topbar } from "@/components/Topbar";
-import { QAAccordion } from "@/components/QAAccordion";
-import { ChatInterface } from "@/components/ChatInterface";
-import { PollingLoader } from "@/components/PollingLoader";
-import { ThemeBadge } from "@/components/ThemeBadge";
-import { StatusBadge } from "@/components/StatusBadge";
-import { useProject } from "@/lib/hooks/useProject";
-import { useProjects } from "@/lib/hooks/useProjects";
+import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, projectStatus } from "@/lib/api";
 import { toast } from "sonner";
-import { AgentPollingStatus } from "@/components/AgentPollingStatus";
-import { extractScore } from "@/lib/utils";
+import {
+  ArrowLeft, CheckCheck, Code2, ExternalLink, FileSearch, Gavel, GitBranch, LineChart, RefreshCw, Sparkles, Trash2,
+} from "lucide-react";
+import { Topbar } from "@/components/Topbar";
+import { ChatInterface } from "@/components/ChatInterface";
+import { PipelineTracker } from "@/components/PipelineTracker";
+import { QAAccordion } from "@/components/QAAccordion";
+import { EmptyState } from "@/components/EmptyState";
+import { Modal } from "@/components/Modal";
+import { ScoreDial } from "@/components/score";
+import { FlagList, StatusPill } from "@/components/status";
+import { CriteriaBreakdown, Points } from "@/components/report/CriteriaBreakdown";
+import { CodePanel, MarketPanel, ProductPanel } from "@/components/report/JudgePanels";
+import { useProject, useReevaluate } from "@/lib/hooks/useProject";
+import { api, isEvaluating, isLegacyReport, JUDGES, type CodeReport, type JudgeKey, type MarketReport, type Project } from "@/lib/api";
+import { JUDGE_COLORS } from "@/lib/constants";
+import { formatDate, formatScore, repoLabel } from "@/lib/utils";
 
-function ScoreBar({ score }: { score: number }) {
-  const color =
-    score >= 7.5 ? "var(--brand-mint)" : score >= 5 ? "var(--brand-mustard)" : "var(--brand-coral)";
-  return (
-    <div className="flex items-center gap-3">
-      <div
-        className="flex-1 h-3 rounded-[2px] overflow-hidden"
-        style={{ border: "2px solid var(--brand-ink)", background: "#f0f0f0" }}
-      >
-        <div
-          className="h-full transition-all"
-          style={{ width: `${(score / 10) * 100}%`, background: color }}
-        />
-      </div>
-      <span
-        className="text-sm font-medium px-2 py-0.5 rounded-[2px] shrink-0"
-        style={{ background: color, border: "1.5px solid var(--brand-ink)", color: "var(--brand-ink)" }}
-      >
-        {score.toFixed(1)}/10
-      </span>
-    </div>
-  );
-}
+const JUDGE_ICONS = { code: Code2, market: LineChart, product: Sparkles } as const;
 
-export default function ProjectDetailPage() {
+export default function ProjectPage() {
   const params = useParams();
   const id = params?.id as string;
   const { data: project, isLoading, error } = useProject(id);
-  const { data: allProjects = [] } = useProjects();
-  const qc = useQueryClient();
-
-  const reviewMut = useMutation({
-    mutationFn: ({ isReviewed }: { isReviewed: boolean }) => api.reviewProject(id, isReviewed),
-    onSuccess: (_, vars) => {
-      toast.success(vars.isReviewed ? "Marked as reviewed" : "Marked as unreviewed");
-      qc.invalidateQueries({ queryKey: ["project", id] });
-      qc.invalidateQueries({ queryKey: ["projects"] });
-    },
-    onError: (e) => toast.error((e as Error).message),
-  });
-
-  // Prev / next navigation
-  const currentIdx = allProjects.findIndex((p) => p.project_id === id);
-  const prevProject = currentIdx > 0 ? allProjects[currentIdx - 1] : null;
-  const nextProject = currentIdx < allProjects.length - 1 ? allProjects[currentIdx + 1] : null;
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen">
-        <Topbar />
-        <div className="p-4 sm:p-8 max-w-3xl mx-auto">
-          <PollingLoader label="Loading project…" />
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !project) {
-    return (
-      <div className="min-h-screen">
-        <Topbar />
-        <div className="p-4 sm:p-8">
-          <p className="text-sm text-destructive">{(error as Error)?.message ?? "Not found"}</p>
-        </div>
-      </div>
-    );
-  }
-
-  const status = projectStatus(project);
-  const themes = project.theme?.split(",").map((t) => t.trim()).filter(Boolean) ?? [];
-  const score = extractScore(project);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <Topbar />
-      <main className="px-4 sm:px-7 py-6 max-w-6xl mx-auto">
-
-        {/* Breadcrumb + prev/next */}
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <Link href={project.hackathon_id ? `/hackathon/${project.hackathon_id}` : "/"} className="text-xs text-muted-foreground hover:underline">
-            ← Back to hackathon
-          </Link>
-          <div className="flex gap-2">
-            {prevProject && (
-              <Link
-                href={`/project/${prevProject.project_id}`}
-                className="text-xs font-medium px-3 py-1 rounded-[3px] press-brutal"
-                style={{ border: "1.5px solid var(--brand-ink)", background: "white", color: "var(--brand-ink)" }}
-              >
-                ← Prev
-              </Link>
-            )}
-            {currentIdx >= 0 && (
-              <span className="text-xs text-muted-foreground px-2 py-1">
-                {currentIdx + 1} / {allProjects.length}
-              </span>
-            )}
-            {nextProject && (
-              <Link
-                href={`/project/${nextProject.project_id}`}
-                className="text-xs font-medium px-3 py-1 rounded-[3px] press-brutal"
-                style={{ border: "1.5px solid var(--brand-ink)", background: "white", color: "var(--brand-ink)" }}
-              >
-                Next →
-              </Link>
-            )}
-          </div>
-        </div>
-
-        {/* Header card */}
-        <div
-          className="bg-card rounded-[4px] p-5 mb-6"
-          style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "5px 5px 0 var(--brand-ink)" }}
-        >
-          <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-medium mb-1">{project.short_description}</h1>
-              {project.long_description && (
-                <p className="text-sm text-foreground leading-relaxed">
-                  {project.long_description}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-2 items-end shrink-0">
-              <div className="flex gap-1.5">
-                <StatusBadge
-                  label="Market"
-                  status={(project.market_agent_analysis?.length ?? 0) > 0 ? "done" : "pending"}
-                />
-                <StatusBadge
-                  label="Code"
-                  status={(project.code_agent_analysis?.length ?? 0) > 0 ? "done" : "pending"}
-                />
-              </div>
-              <button
-                onClick={() => reviewMut.mutate({ isReviewed: !project.is_reviewed })}
-                disabled={reviewMut.isPending}
-                className="text-xs font-medium px-3 py-1.5 rounded-[3px] press-brutal disabled:opacity-50"
-                style={{
-                  background: project.is_reviewed ? "var(--brand-mint)" : "#F4D738",
-                  border: "2.5px solid var(--brand-ink)",
-                  boxShadow: "3px 3px 0 var(--brand-ink)",
-                }}
-              >
-                {project.is_reviewed ? "✓ Reviewed" : "Mark reviewed"}
-              </button>
-            </div>
-          </div>
-
-          {/* Score bar */}
-          {score !== null && (
-            <div className="mb-3">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
-                Market score
-              </p>
-              <ScoreBar score={score} />
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2 items-center">
-            {themes.map((t) => (
-              <ThemeBadge key={t} label={t} />
-            ))}
-            {project.github_link && (
-              <a
-                href={project.github_link}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[11px] font-medium px-2 py-0.5 rounded-[2px] underline"
-                style={{ border: "1.5px solid var(--brand-ink)" }}
-              >
-                GitHub ↗
-              </a>
-            )}
-          </div>
-
-          {status === "pending" && (
-            <AgentPollingStatus />
-          )}
-        </div>
-
-        {/* Two-column: analysis + sticky chat */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          <div className="space-y-6">
-            <Section title="Market analysis" accent="var(--brand-mint)">
-              <QAAccordion items={project.market_agent_analysis ?? []} accent="var(--brand-mint)" />
-            </Section>
-            <Section title="Code analysis" accent="var(--brand-pink)">
-              <QAAccordion items={project.code_agent_analysis ?? []} accent="var(--brand-pink)" />
-            </Section>
-          </div>
-          {/* Sticky chat */}
-          <div className="lg:sticky lg:top-6">
-            <ChatInterface projectId={project.project_id} />
-          </div>
-        </div>
+      <main id="main" className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
+        {isLoading ? (
+          <ReportSkeleton />
+        ) : error || !project ? (
+          <EmptyState
+            icon={FileSearch}
+            title="Project not found"
+            description={(error as Error)?.message ?? "This submission doesn't exist or was deleted."}
+            action={<Link href="/dashboard" className="btn">Back to hackathons</Link>}
+          />
+        ) : (
+          <Report project={project} />
+        )}
       </main>
     </div>
   );
 }
 
-function Section({
-  title, accent, children,
-}: {
-  title: string;
-  accent: string;
-  children: React.ReactNode;
-}) {
+function Report({ project }: { project: Project }) {
+  const evaluating = isEvaluating(project);
+  const verdict = project.verdict;
+  const repoUrl = project.github_link?.replace(/\.git$/, "");
+  const legacy = project.status === "legacy" || isLegacyReport(project.code_agent_analysis) || isLegacyReport(project.market_agent_analysis);
+  const criteria = verdict?.criteria?.length ? verdict.criteria : project.criteria_scores;
+
   return (
-    <section>
-      <h2
-        className="text-sm font-medium pb-1 mb-3 inline-block"
-        style={{ borderBottom: `3px solid ${accent}` }}
+    <>
+      <Header project={project} />
+
+      <AnimatePresence mode="popLayout">
+        {evaluating && (
+          <motion.div key="tracker" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} className="mb-8">
+            <PipelineTracker project={project} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {legacy && !evaluating && <LegacyNotice project={project} />}
+
+      {project.status === "failed" && !evaluating && (
+        <div className="rounded-xl border-2 border-ink bg-coral/40 p-4 mb-8 text-sm" role="alert">
+          <strong>The evaluation failed.</strong> {project.last_error ?? "Try running the jury again."}
+        </div>
+      )}
+
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
+        <div className="space-y-10 min-w-0">
+          {(verdict || project.overall_score !== null) && !legacy && (
+            <VerdictHero project={project} />
+          )}
+
+          {project.flags?.length > 0 && (
+            <section aria-labelledby="flags-title">
+              <h2 id="flags-title" className="text-xl font-bold mb-3">Integrity & rule checks</h2>
+              <FlagList flags={project.flags} />
+            </section>
+          )}
+
+          {criteria.length > 0 && !legacy && (
+            <section aria-labelledby="criteria-title">
+              <div className="flex items-end justify-between mb-3">
+                <h2 id="criteria-title" className="text-xl font-bold">Scorecard</h2>
+                <span className="text-xs text-muted-foreground">Final score = weighted average of these criteria</span>
+              </div>
+              <CriteriaBreakdown criteria={criteria} repoUrl={repoUrl} />
+            </section>
+          )}
+
+          {!legacy && <JudgeTabs project={project} repoUrl={repoUrl} />}
+        </div>
+
+        <aside className="lg:sticky lg:top-20 space-y-4">
+          <ChatInterface projectId={project.project_id} repoUrl={repoUrl} />
+          <ProjectFacts project={project} />
+        </aside>
+      </div>
+    </>
+  );
+}
+
+function Header({ project }: { project: Project }) {
+  const qc = useQueryClient();
+  const router = useRouter();
+  const reevaluate = useReevaluate(project.project_id);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const review = useMutation({
+    mutationFn: () => api.reviewProject(project.project_id, !project.is_reviewed),
+    onSuccess: () => {
+      toast.success(project.is_reviewed ? "Marked as not reviewed" : "Marked as reviewed by a human judge");
+      qc.invalidateQueries({ queryKey: ["project", project.project_id] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => api.deleteProject(project.project_id),
+    onSuccess: () => {
+      toast.success("Submission deleted");
+      qc.invalidateQueries({ queryKey: ["leaderboard"] });
+      router.push(project.hackathon_id ? `/hackathon/${project.hackathon_id}` : "/dashboard");
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  return (
+    <div className="mb-8">
+      <Link
+        href={project.hackathon_id ? `/hackathon/${project.hackathon_id}` : "/dashboard"}
+        className="inline-flex items-center gap-1.5 text-sm font-semibold mb-5 hover:underline"
       >
-        {title}
-      </h2>
-      {children}
+        <ArrowLeft size={15} /> Back to the leaderboard
+      </Link>
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <StatusPill status={project.status} />
+            {project.rank && (
+              <span className="chip bg-yellow num">
+                Rank #{project.rank}{project.ranked_total ? ` of ${project.ranked_total}` : ""}
+              </span>
+            )}
+            {project.is_reviewed && <span className="chip bg-mint"><CheckCheck size={12} /> Human-reviewed</span>}
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-bold">{project.name}</h1>
+          <p className="text-lg text-muted-foreground mt-1">{project.short_description}</p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <a href={project.github_link} target="_blank" rel="noreferrer" className="chip hover:bg-yellow">
+              <GitBranch size={12} aria-hidden /> {repoLabel(project.github_link)}
+            </a>
+            {project.demo_link && (
+              <a href={project.demo_link} target="_blank" rel="noreferrer" className="chip hover:bg-yellow">
+                <ExternalLink size={12} aria-hidden /> Live demo
+              </a>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <button
+            className="btn"
+            disabled={reevaluate.isPending || isEvaluating(project)}
+            onClick={() =>
+              reevaluate.mutate(undefined, {
+                onSuccess: () => toast.success("The jury will review this project again"),
+                onError: (e) => toast.error((e as Error).message),
+              })
+            }
+          >
+            <RefreshCw size={16} className={isEvaluating(project) ? "animate-spin-slow" : ""} />
+            {isEvaluating(project) ? "Judging…" : "Re-run jury"}
+          </button>
+          <button className={`btn ${project.is_reviewed ? "" : "btn-primary"}`} disabled={review.isPending} onClick={() => review.mutate()}>
+            <CheckCheck size={16} /> {project.is_reviewed ? "Unmark review" : "Mark reviewed"}
+          </button>
+          <button className="btn" onClick={() => setConfirmDelete(true)} aria-label="Delete submission">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+
+      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this submission?" subtitle="Its scores, reports and code index are removed permanently.">
+        <div className="flex justify-end gap-2">
+          <button className="btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          <button className="btn btn-danger" disabled={remove.isPending} onClick={() => remove.mutate()}>
+            <Trash2 size={16} /> {remove.isPending ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+function VerdictHero({ project }: { project: Project }) {
+  const verdict = project.verdict;
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="brutal-card p-6 sm:p-8 relative overflow-hidden"
+      aria-labelledby="verdict-title"
+    >
+      <div className="absolute inset-y-0 right-0 w-1/3 opacity-[0.06] hidden md:block" style={{ backgroundImage: "repeating-linear-gradient(45deg, var(--ink) 0 2px, transparent 2px 12px)" }} aria-hidden />
+      <div className="relative flex flex-col md:flex-row gap-8 items-center md:items-start">
+        <ScoreDial score={project.overall_score} />
+        <div className="flex-1 min-w-0">
+          <p className="eyebrow flex items-center gap-1.5 mb-2"><Gavel size={13} aria-hidden /> Head judge verdict</p>
+          <h2 id="verdict-title" className="text-2xl font-bold leading-tight mb-2">{verdict?.headline || project.headline || "Verdict pending"}</h2>
+          {verdict?.summary && <p className="leading-relaxed text-muted-foreground">{verdict.summary}</p>}
+          <div className="grid grid-cols-3 gap-2 mt-5">
+            {JUDGES.map((j, i) => (
+              <JudgeScoreCard key={j.key} judge={j.key} label={j.label} score={project.judge_scores?.[j.key]} delay={0.3 + i * 0.1} />
+            ))}
+          </div>
+        </div>
+      </div>
+      {verdict && (verdict.strengths?.length > 0 || verdict.improvements?.length > 0) && (
+        <div className="relative grid gap-3 sm:grid-cols-2 mt-6">
+          <Points title="Why it scores" items={verdict.strengths} tone="var(--mint)" />
+          <Points title="What to improve" items={verdict.improvements} tone="var(--coral)" />
+        </div>
+      )}
+    </motion.section>
+  );
+}
+
+function JudgeScoreCard({ judge, label, score, delay }: { judge: JudgeKey; label: string; score?: number | null; delay: number }) {
+  const Icon = JUDGE_ICONS[judge];
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, rotate: -2 }}
+      animate={{ opacity: 1, y: 0, rotate: 0 }}
+      transition={{ delay, type: "spring", stiffness: 300, damping: 20 }}
+      className="rounded-xl border-2 border-ink p-3 shadow-[var(--shadow-hard-sm)]"
+      style={{ background: JUDGE_COLORS[judge] }}
+    >
+      <Icon size={16} aria-hidden />
+      <div className="num text-2xl font-bold mt-1">{formatScore(score)}</div>
+      <div className="text-xs font-semibold leading-tight">{label}</div>
+    </motion.div>
+  );
+}
+
+function JudgeTabs({ project, repoUrl }: { project: Project; repoUrl?: string }) {
+  const [tab, setTab] = useState<JudgeKey>("code");
+  const code = project.code_agent_analysis as CodeReport | null | undefined;
+  const market = project.market_agent_analysis as MarketReport | null | undefined;
+
+  return (
+    <section aria-labelledby="reports-title">
+      <h2 id="reports-title" className="text-xl font-bold mb-3">Judges&apos; reports</h2>
+      <div role="tablist" aria-label="Judge reports" className="flex flex-wrap gap-2 mb-4">
+        {JUDGES.map((j) => {
+          const Icon = JUDGE_ICONS[j.key];
+          const active = tab === j.key;
+          return (
+            <button
+              key={j.key}
+              role="tab"
+              id={`tab-${j.key}`}
+              aria-selected={active}
+              aria-controls={`panel-${j.key}`}
+              onClick={() => setTab(j.key)}
+              className="btn"
+              style={{ background: active ? JUDGE_COLORS[j.key] : undefined, boxShadow: active ? "var(--shadow-hard)" : undefined, transform: active ? "translate(-1px,-1px)" : undefined }}
+            >
+              <Icon size={16} aria-hidden /> {j.label}
+              <span className="num opacity-70">{formatScore(project.judge_scores?.[j.key])}</span>
+            </button>
+          );
+        })}
+      </div>
+      {/* Enter-only animation: an exit phase would collapse the page and jump the scroll position */}
+      <motion.div
+        key={tab}
+        id={`panel-${tab}`}
+        role="tabpanel"
+        aria-labelledby={`tab-${tab}`}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className="rounded-2xl border-2 border-ink p-4 sm:p-6"
+        style={{ background: `color-mix(in srgb, ${JUDGE_COLORS[tab]} 14%, var(--paper))` }}
+      >
+        {tab === "code" && <CodePanel report={code} snapshot={project.repo_snapshot} repoUrl={repoUrl} />}
+        {tab === "market" && <MarketPanel report={market} />}
+        {tab === "product" && <ProductPanel report={project.product_agent_analysis} repoUrl={repoUrl} />}
+      </motion.div>
     </section>
+  );
+}
+
+function ProjectFacts({ project }: { project: Project }) {
+  return (
+    <div className="brutal-card p-4 text-sm space-y-3">
+      {project.long_description && (
+        <div>
+          <p className="eyebrow mb-1">Team&apos;s description</p>
+          <p className="leading-relaxed whitespace-pre-line">{project.long_description}</p>
+        </div>
+      )}
+      <dl className="grid grid-cols-2 gap-2 text-xs">
+        <dt className="text-muted-foreground">Submitted</dt>
+        <dd className="font-semibold text-right">{formatDate(project.created_at, true)}</dd>
+        <dt className="text-muted-foreground">Last judged</dt>
+        <dd className="font-semibold text-right">{formatDate(project.evaluated_at, true)}</dd>
+        <dt className="text-muted-foreground">Declared stack</dt>
+        <dd className="font-semibold text-right">{(project.project_type ?? "OTHER").replace(/_/g, " ").toLowerCase()}</dd>
+      </dl>
+    </div>
+  );
+}
+
+function LegacyNotice({ project }: { project: Project }) {
+  const reevaluate = useReevaluate(project.project_id);
+  const code = project.code_agent_analysis;
+  const market = project.market_agent_analysis;
+  return (
+    <section className="brutal-card p-6 mb-8 space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold">This project was judged by the previous version of Evalio</h2>
+          <p className="text-muted-foreground text-sm">Re-run the jury to get code evidence, cited market research, claim checks and a weighted ranking.</p>
+        </div>
+        <button className="btn btn-primary shrink-0" disabled={reevaluate.isPending} onClick={() => reevaluate.mutate(undefined, { onSuccess: () => toast.success("Re-evaluation queued") })}>
+          <RefreshCw size={16} /> Re-run jury
+        </button>
+      </div>
+      {isLegacyReport(market) && market.length > 0 && (<div><p className="eyebrow mb-2">Old market answers</p><QAAccordion items={market} /></div>)}
+      {isLegacyReport(code) && code.length > 0 && (<div><p className="eyebrow mb-2">Old code answers</p><QAAccordion items={code} /></div>)}
+    </section>
+  );
+}
+
+function ReportSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="h-10 w-1/2 skeleton" />
+      <div className="h-5 w-1/3 skeleton" />
+      <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+        <div className="brutal-card p-8 flex gap-8">
+          <div className="size-40 rounded-full skeleton shrink-0" />
+          <div className="flex-1 space-y-3">
+            <div className="h-6 w-3/4 skeleton" />
+            <div className="h-4 w-full skeleton" />
+            <div className="h-20 w-full skeleton" />
+          </div>
+        </div>
+        <div className="h-80 skeleton" />
+      </div>
+    </div>
   );
 }
