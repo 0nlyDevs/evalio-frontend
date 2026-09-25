@@ -12,7 +12,15 @@ const SUGGESTIONS = [
   "What should the team fix first?",
 ];
 
-export function ChatInterface({ projectId, repoUrl }: { projectId?: string; repoUrl?: string }) {
+export function ChatInterface({
+  projectId,
+  repoUrl,
+  className = "",
+}: {
+  projectId?: string;
+  repoUrl?: string;
+  className?: string;
+}) {
   const { history, pending, error, ask, reset } = useChat(projectId);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -28,7 +36,7 @@ export function ChatInterface({ projectId, repoUrl }: { projectId?: string; repo
   };
 
   return (
-    <section className="brutal-card flex flex-col overflow-hidden" aria-label="Ask the jury">
+    <section className={`brutal-card flex flex-col overflow-hidden ${className}`} aria-label="Ask the jury">
       <header className="flex items-center justify-between gap-3 px-4 py-3 border-b-2 border-ink bg-ink text-paper">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-yellow" aria-hidden />
@@ -41,7 +49,7 @@ export function ChatInterface({ projectId, repoUrl }: { projectId?: string; repo
         )}
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[260px] max-h-[460px]" aria-live="polite">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[260px] max-h-[460px] lg:min-h-[200px] lg:max-h-none" aria-live="polite">
         {history.length === 0 && (
           <div>
             <p className="text-sm text-muted-foreground mb-3">
