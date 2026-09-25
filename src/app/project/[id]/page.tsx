@@ -105,8 +105,9 @@ function Report({ project }: { project: Project }) {
           {!legacy && <JudgeTabs project={project} repoUrl={repoUrl} />}
         </div>
 
-        <aside className="lg:sticky lg:top-20 space-y-4">
-          <ChatInterface projectId={project.project_id} repoUrl={repoUrl} />
+        {/* Fills the viewport height on desktop so there is never a dead area beside the report */}
+        <aside className="lg:sticky lg:top-20 lg:h-[calc(100dvh-6rem)] flex flex-col gap-4">
+          <ChatInterface projectId={project.project_id} repoUrl={repoUrl} className="lg:flex-1 lg:min-h-0" />
           <ProjectFacts project={project} />
         </aside>
       </div>
@@ -306,15 +307,56 @@ function JudgeTabs({ project, repoUrl }: { project: Project; repoUrl?: string })
 }
 
 function ProjectFacts({ project }: { project: Project }) {
+  const [expanded, setExpanded] = useState(false);
+  const snap = project.repo_snapshot;
+  const stack = snap ? [...snap.stack.frameworks.map((f) => f.label), ...snap.stack.libraries].slice(0, 6) : [];
+  const langs = snap?.languages.slice(0, 5) ?? [];
+  const LANG_COLORS = ["var(--sky)", "var(--yellow)", "var(--mint)", "var(--coral)", "var(--violet)"];
+
   return (
-    <div className="brutal-card p-4 text-sm space-y-3">
+    <div className="brutal-card p-4 text-sm space-y-3 shrink-0">
+      <p className="eyebrow">At a glance</p>
       {project.long_description && (
         <div>
-          <p className="eyebrow mb-1">Team&apos;s description</p>
-          <p className="leading-relaxed whitespace-pre-line">{project.long_description}</p>
+          <p className={`leading-relaxed whitespace-pre-line ${expanded ? "" : "line-clamp-3"}`}>{project.long_description}</p>
+          {project.long_description.length > 160 && (
+            <button className="text-xs font-semibold underline mt-1" onClick={() => setExpanded((v) => !v)}>
+              {expanded ? "Show less" : "Read the team's description"}
+            </button>
+          )}
         </div>
       )}
-      <dl className="grid grid-cols-2 gap-2 text-xs">
+
+      {snap && (
+        <>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              ["LOC", snap.files.code_loc.toLocaleString("en-US")],
+              ["Commits", `${snap.history.commit_count}${snap.history.truncated ? "+" : ""}`],
+              ["People", snap.history.contributors.length],
+            ].map(([label, value]) => (
+              <div key={label as string} className="rounded-lg border-2 border-ink bg-muted/60 py-1.5">
+                <div className="num font-bold">{value}</div>
+                <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">{label}</div>
+              </div>
+            ))}
+          </div>
+          {langs.length > 0 && (
+            <div className="flex h-2.5 rounded-full border-2 border-ink overflow-hidden" title={langs.map((l) => `${l.name} ${Math.round(l.share * 100)}%`).join(" · ")}>
+              {langs.map((l, i) => (
+                <span key={l.name} style={{ width: `${l.share * 100}%`, background: LANG_COLORS[i] }} className="h-full" />
+              ))}
+            </div>
+          )}
+          {stack.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {stack.map((s) => <span key={s} className="chip text-[11px]">{s}</span>)}
+            </div>
+          )}
+        </>
+      )}
+
+      <dl className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs pt-2 border-t-2 border-dashed border-ink/30">
         <dt className="text-muted-foreground">Submitted</dt>
         <dd className="font-semibold text-right">{formatDate(project.created_at, true)}</dd>
         <dt className="text-muted-foreground">Last judged</dt>
