@@ -1,240 +1,140 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
 import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { api } from "@/lib/api";
+import { PROJECT_TYPES } from "@/lib/constants";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Modal } from "./Modal";
 
-interface AddProjectModalProps {
+// github.com / gitlab.com / bitbucket.org + owner/repo (dots, dashes and underscores allowed)
+const REPO_RE = /^(https?:\/\/)?(www\.)?(github\.com|gitlab\.com|bitbucket\.org)\/[\w.-]+\/[\w.-]+(\.git)?\/?(\/.*)?$/i;
+
+function validate(values: { name: string; short: string; github: string; demo: string }) {
+  return {
+    name: values.name.trim().length > 80 ? "Keep the name under 80 characters" : null,
+    short: values.short.trim().length < 5 ? "Describe the project in at least 5 characters" : values.short.length > 160 ? "Keep the tagline under 160 characters" : null,
+    github: !REPO_RE.test(values.github.trim()) ? "Paste a public repository URL, e.g. https://github.com/team/project" : null,
+    demo: values.demo && !/^(https?:\/\/)?[\w-]+(\.[\w-]+)+/.test(values.demo.trim()) ? "That doesn't look like a URL" : null,
+  };
+}
+
+export function AddProjectModal({
+  open, onClose, hackathonId,
+}: {
   open: boolean;
   onClose: () => void;
   hackathonId?: number | string;
-}
-
-const PROJECT_TYPES = [
-  { value: "NEXT_JS", label: "Next.js" },
-  { value: "VUE", label: "Vue" },
-  { value: "NUXT", label: "Nuxt" },
-  { value: "ANGULAR", label: "Angular" },
-  { value: "SVELTE", label: "Svelte" },
-  { value: "SVELTEKIT", label: "SvelteKit" },
-  { value: "ASTRO", label: "Astro" },
-  { value: "REMIX", label: "Remix" },
-  { value: "TAILWIND", label: "Tailwind" },
-  { value: "NODE_EXPRESS", label: "Node Express" },
-  { value: "FASTAPI", label: "FastAPI" },
-  { value: "DJANGO", label: "Django" },
-  { value: "SPRING_BOOT", label: "Spring Boot" },
-  { value: "GIN", label: "Gin" },
-  { value: "RAILS", label: "Rails" },
-  { value: "LARAVEL", label: "Laravel" },
-  { value: "ACTIX", label: "Actix" },
-  { value: "SWIFT_UI", label: "SwiftUI" },
-  { value: "KOTLIN_JETPACK", label: "Kotlin Jetpack" },
-  { value: "REACT_NATIVE", label: "React Native" },
-  { value: "EXPO", label: "Expo" },
-  { value: "FLUTTER", label: "Flutter" },
-  { value: "DOTNET_MAUI", label: ".NET MAUI" },
-  { value: "IONIC", label: "Ionic" },
-  { value: "NATIVESCRIPT", label: "NativeScript" },
-  { value: "OTHER", label: "Other" },
-] as const;
-
-// Validate GitHub URL format
-function isValidGithubUrl(url: string): boolean {
-  if (!url.trim()) return false;
-  // Accept github.com, www.github.com, and github.com with www
-  // Also accepts raw GitHub enterprise URLs
-  const githubRegex = /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/?$/i;
-  return githubRegex.test(url.trim());
-}
-
-// Validate short description
-function isValidShortDescription(desc: string): boolean {
-  const trimmed = desc.trim();
-  // Must be at least 5 characters and at most 100
-  return trimmed.length >= 5 && trimmed.length <= 100;
-}
-
-export function AddProjectModal({ open, onClose, hackathonId }: AddProjectModalProps) {
+}) {
   const qc = useQueryClient();
-  const [shortDescription, setShort] = useState("");
-  const [longDescription, setLong] = useState("");
-  const [githubLink, setGithub] = useState("");
-  const [demoLink, setDemo] = useState("");
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [short, setShort] = useState("");
+  const [long, setLong] = useState("");
+  const [github, setGithub] = useState("");
+  const [demo, setDemo] = useState("");
   const [projectType, setProjectType] = useState("OTHER");
-  const [touched, setTouched] = useState({ short: false, github: false });
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  const createMut = useMutation({
+  const errors = validate({ name, short, github, demo });
+  const show = (field: keyof typeof errors) => (touched[field] || touched.submit) && errors[field];
+
+  const mut = useMutation({
     mutationFn: api.createProject,
-    onSuccess: () => {
-      toast.success("Project submitted — agents are analyzing it now");
-      qc.invalidateQueries({ queryKey: ["hackathon-projects"] });
-      setShort("");
-      setLong("");
-      setGithub("");
-      setDemo("");
-      setTouched({ short: false, github: false });
+    onSuccess: (res) => {
+      toast.success("Submitted — the jury is on it");
+      qc.invalidateQueries({ queryKey: ["leaderboard"] });
+      qc.invalidateQueries({ queryKey: ["hackathons"] });
+      setName(""); setShort(""); setLong(""); setGithub(""); setDemo(""); setProjectType("OTHER"); setTouched({});
       onClose();
+      router.push(`/project/${res.project_id}`);
     },
-    onError: (e) => toast.error(`Submission failed: ${(e as Error).message}`),
+    onError: (e) => toast.error((e as Error).message),
   });
 
-  // Validation checks
-  const shortError = touched.short && !isValidShortDescription(shortDescription);
-  const githubError = touched.github && !isValidGithubUrl(githubLink);
-  const canSubmit = isValidShortDescription(shortDescription) && isValidGithubUrl(githubLink) && !createMut.isPending;
+  const submit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    setTouched({ submit: true });
+    if (Object.values(errors).some(Boolean)) return;
+    mut.mutate({
+      name: name.trim() || undefined,
+      shortDescription: short.trim(),
+      longDescription: long.trim(),
+      githubLink: github.trim(),
+      demoLink: demo.trim() || undefined,
+      hackathonId,
+      projectType,
+    });
+  };
 
-  if (!open) return null;
+  const blur = (field: string) => () => setTouched((t) => ({ ...t, [field]: true }));
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.5)" }}
-      onClick={onClose}
-    >
-      <div
-        className="bg-card border-brutal rounded-[4px] shadow-brutal-xl w-full max-w-lg p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-medium">Add submission</h2>
-          <button
-            onClick={onClose}
-            className="text-xs font-medium px-2 py-1 rounded-[2px] press-brutal"
-            style={{ border: "1.5px solid var(--brand-ink)" }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            // Mark fields as touched to show errors
-            setTouched({ short: true, github: true });
-            
-            if (!canSubmit) {
-              if (!isValidShortDescription(shortDescription)) {
-                toast.error("Short description must be 5-100 characters");
-              } else if (!isValidGithubUrl(githubLink)) {
-                toast.error("Please enter a valid GitHub repository URL");
-              }
-              return;
-            }
-            createMut.mutate({ shortDescription, longDescription, githubLink, demoLink: demoLink || undefined, hackathonId, projectType });
-          }}
-          className="space-y-4"
-        >
-          <Field 
-            label="Short description *" 
-            error={shortError ? "Must be 5-100 characters" : undefined}
-          >
-            <input
-              value={shortDescription}
-              onChange={(e) => setShort(e.target.value)}
-              onBlur={() => setTouched(t => ({ ...t, short: true }))}
-              placeholder="One-liner describing your project"
-              className="w-full text-sm px-3 py-2 rounded-[3px] outline-none bg-white"
-              style={{ 
-                border: shortError ? "2.5px solid var(--destructive)" : "2.5px solid var(--brand-ink)", 
-                boxShadow: shortError ? "3px 3px 0 var(--destructive)" : "3px 3px 0 var(--brand-ink)" 
-              }}
-            />
+    <Modal open={open} onClose={onClose} title="Submit a project" subtitle="The jury clones the repo, reads the code and researches the market.">
+      <form onSubmit={submit} className="space-y-5" noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field id="p-name" label="Project name" error={show("name")}>
+            <input id="p-name" className="field" value={name} onChange={(e) => setName(e.target.value)} onBlur={blur("name")} placeholder="e.g. GreenRoute" maxLength={80} />
           </Field>
-
-          <Field label="Project type *">
+          <div>
+            <span className="label">Main framework</span>
             <Select value={projectType} onValueChange={setProjectType}>
-              <SelectTrigger
-                className="w-full bg-white text-sm"
-                style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-              >
-                <SelectValue placeholder="Select project type" />
+              <SelectTrigger className="field !h-11 w-full" aria-label="Main framework">
+                <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="border-2 border-ink max-h-72">
                 {PROJECT_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </Field>
-           
-          <Field label="Long description">
-            <textarea
-              value={longDescription}
-              onChange={(e) => setLong(e.target.value)}
-              rows={3}
-              placeholder="What does it do? Who is it for?"
-              className="w-full text-sm px-3 py-2 rounded-[3px] outline-none bg-white"
-              style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-            />
-          </Field>
-          
-          <Field
-            label="GitHub URL *"
-            error={githubError ? "Must be a valid GitHub repo URL (e.g., github.com/user/repo)" : undefined}
-          >
-            <input
-              value={githubLink}
-              onChange={(e) => setGithub(e.target.value)}
-              onBlur={() => setTouched(t => ({ ...t, github: true }))}
-              placeholder="https://github.com/user/repo"
-              className="w-full text-sm px-3 py-2 rounded-[3px] outline-none bg-white"
-              style={{
-                border: githubError ? "2.5px solid var(--destructive)" : "2.5px solid var(--brand-ink)",
-                boxShadow: githubError ? "3px 3px 0 var(--destructive)" : "3px 3px 0 var(--brand-ink)"
-              }}
-            />
-          </Field>
+          </div>
+        </div>
 
-          <Field label="Demo link">
-            <input
-              value={demoLink}
-              onChange={(e) => setDemo(e.target.value)}
-              placeholder="https://myapp.demo.com (optional)"
-              className="w-full text-sm px-3 py-2 rounded-[3px] outline-none bg-white"
-              style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-            />
-          </Field>
+        <Field id="p-short" label="Tagline *" error={show("short")}>
+          <input id="p-short" className="field" value={short} onChange={(e) => setShort(e.target.value)} onBlur={blur("short")} placeholder="One sentence: what it does and for whom" maxLength={160} aria-invalid={!!show("short")} />
+        </Field>
 
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="w-full text-sm font-medium py-2.5 rounded-[3px] press-brutal disabled:opacity-60"
-            style={{
-              background: canSubmit ? "var(--brand-coral)" : "var(--brand-ink)",
-              color: canSubmit ? "var(--brand-ink)" : "white",
-              border: "2.5px solid var(--brand-ink)",
-              boxShadow: "4px 4px 0 var(--brand-ink)",
-            }}
-          >
-            {createMut.isPending ? "Submitting…" : "+ Submit project"}
-          </button>
-        </form>
-      </div>
-    </div>
+        <Field id="p-long" label="Description" hint="List the features you built — the Product Judge checks each one against your code.">
+          <textarea id="p-long" className="field resize-y" rows={4} value={long} onChange={(e) => setLong(e.target.value)} placeholder="The problem, who has it, and what your project does about it." maxLength={6000} />
+        </Field>
+
+        <Field id="p-github" label="Repository URL *" error={show("github")}>
+          <input id="p-github" type="url" inputMode="url" className="field" value={github} onChange={(e) => setGithub(e.target.value)} onBlur={blur("github")} placeholder="https://github.com/team/project" aria-invalid={!!show("github")} />
+        </Field>
+
+        <Field id="p-demo" label="Demo link" error={show("demo")} hint="Optional — the jury checks that it's live.">
+          <input id="p-demo" type="url" inputMode="url" className="field" value={demo} onChange={(e) => setDemo(e.target.value)} onBlur={blur("demo")} placeholder="https://my-project.vercel.app" aria-invalid={!!show("demo")} />
+        </Field>
+
+        <button type="submit" className="btn btn-primary w-full" disabled={mut.isPending}>
+          {mut.isPending ? "Submitting…" : "Submit to the jury"}
+        </button>
+      </form>
+    </Modal>
   );
 }
 
-function Field({ label, children, error }: { label: string; children: React.ReactNode; error?: string }) {
+function Field({
+  id, label, error, hint, children,
+}: {
+  id: string;
+  label: string;
+  error?: string | null | false;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="block">
-      <span className="block text-[11px] font-medium uppercase tracking-wider mb-1.5 text-muted-foreground">
-        {label}
-      </span>
+    <div>
+      <label htmlFor={id} className="label">{label}</label>
       {children}
-      {error && (
-        <span className="block text-[11px] text-destructive mt-1">{error}</span>
-      )}
-    </label>
+      {error ? (
+        <p className="text-sm text-[#b42318] mt-1.5" role="alert">{error}</p>
+      ) : hint ? (
+        <p className="text-xs text-muted-foreground mt-1.5">{hint}</p>
+      ) : null}
+    </div>
   );
 }

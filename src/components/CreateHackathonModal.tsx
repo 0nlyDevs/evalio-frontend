@@ -1,420 +1,310 @@
 "use client";
 
-import { useState, useCallback, useEffect, KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { AnimatePresence, motion } from "motion/react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { CalendarIcon, X } from "lucide-react";
+import { api, type JudgeKey } from "@/lib/api";
+import { JUDGE_COLORS } from "@/lib/constants";
+import { Modal } from "./Modal";
 
-// Validation constants
-const MAX_TAG_LENGTH = 50;
-const MAX_NAME_LENGTH = 100;
-const MAX_DESCRIPTION_LENGTH = 2000;
-
-interface CreateHackathonModalProps {
-  open: boolean;
-  onClose: () => void;
+interface CriterionDraft {
+  id: number;
+  name: string;
+  weight: number;
 }
 
-export function CreateHackathonModal({ open, onClose }: CreateHackathonModalProps) {
+const DEFAULT_CRITERIA: Omit<CriterionDraft, "id">[] = [
+  { name: "Technical Execution", weight: 30 },
+  { name: "Innovation", weight: 25 },
+  { name: "Market Potential", weight: 25 },
+  { name: "Theme Alignment", weight: 20 },
+];
+
+// Mirrors the backend routing (services/criteria.py) so organisers see which judge scores what
+const ROUTING: [JudgeKey, string[]][] = [
+  ["code", ["code", "quality", "technical", "tech", "architecture", "scalab", "security", "performance", "test", "documentation", "docs", "stack", "implementation", "engineering", "complexity", "maintainab", "execution", "robust", "api", "infra", "devops", "clean", "reliab", "algorithm", "backend", "frontend"]],
+  ["market", ["market", "business", "commercial", "revenue", "monetiz", "monetis", "viab", "impact", "social", "adoption", "customer", "competit", "startup", "sustainab", "environment", "economic", "traction", "growth", "feasib"]],
+  ["product", ["innovat", "creativ", "original", "novel", "idea", "theme", "relevan", "alignment", "design", "ux", "ui", "usab", "presentation", "pitch", "demo", "complete", "functional", "feature", "wow", "polish", "accessib", "problem"]],
+];
+
+function routeCriterion(name: string): JudgeKey {
+  const lower = name.toLowerCase();
+  let best: JudgeKey = "product";
+  let bestScore = 0;
+  for (const [judge, keywords] of ROUTING) {
+    const score = keywords.reduce((s, k) => (new RegExp(`(^|[^a-z])${k}`).test(lower) ? s + k.length : s), 0);
+    if (score > bestScore) {
+      best = judge;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+const JUDGE_NAMES: Record<JudgeKey, string> = { code: "Code Judge", market: "Market Judge", product: "Product Judge" };
+
+let nextId = 100;
+
+export function CreateHackathonModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [techTags, setTechTags] = useState<string[]>(["Python", "JavaScript", "React"]);
-  const [themeTags, setThemeTags] = useState<string[]>(["Healthcare", "Education", "Environment"]);
-  const [criteriaTags, setCriteriaTags] = useState<string[]>(["Innovation", "Code Quality", "Market Potential"]);
-  const [techInput, setTechInput] = useState("");
-  const [themeInput, setThemeInput] = useState("");
-  const [criteriaInput, setCriteriaInput] = useState("");
-  const [deadline, setDeadline] = useState<Date | undefined>(undefined);
-  const [deadlineHour, setDeadlineHour] = useState("12");
-  const [deadlineMinute, setDeadlineMinute] = useState("00");
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [themes, setThemes] = useState<string[]>([]);
+  const [technologies, setTechnologies] = useState<string[]>([]);
+  const [criteria, setCriteria] = useState<CriterionDraft[]>(DEFAULT_CRITERIA.map((c, i) => ({ ...c, id: i })));
+  const [startsAt, setStartsAt] = useState("");
+  const [deadline, setDeadline] = useState("");
   const [isAllowed, setIsAllowed] = useState(true);
+  const [touched, setTouched] = useState(false);
+
+  const totalWeight = criteria.reduce((s, c) => s + (c.weight || 0), 0);
+  const nameError = name.trim().length < 3 ? "Give the hackathon a name (3+ characters)" : null;
+  const dateError = startsAt && deadline && new Date(deadline) <= new Date(startsAt) ? "The deadline must be after the start" : null;
+  const criteriaError = criteria.filter((c) => c.name.trim()).length === 0 ? "Add at least one criterion" : null;
+
+  const reset = () => {
+    setName(""); setDescription(""); setThemes([]); setTechnologies([]);
+    setCriteria(DEFAULT_CRITERIA.map((c, i) => ({ ...c, id: i })));
+    setStartsAt(""); setDeadline(""); setIsAllowed(true); setTouched(false);
+  };
 
   const mut = useMutation({
     mutationFn: api.createHackathon,
-    onSuccess: () => {
-      toast.success("Hackathon created!");
+    onSuccess: (res) => {
+      toast.success("Hackathon created — share it and start collecting submissions");
       qc.invalidateQueries({ queryKey: ["hackathons"] });
-      resetForm();
+      reset();
       onClose();
+      router.push(`/hackathon/${res.hackathon_id}`);
     },
     onError: (e) => toast.error((e as Error).message),
   });
 
-  // Track if component is mounted to prevent state updates after unmount
-  useEffect(() => {
-    return () => {
-      // Cleanup flag - the query client handles cancelled mutations automatically
-    };
-  }, []);
-
-  const resetForm = () => {
-    setName(""); setDescription(""); setDeadline(undefined); setCalendarOpen(false);
-    setDeadlineHour("12");
-    setDeadlineMinute("00");
-    setTechTags(["Python", "JavaScript", "React"]);
-    setThemeTags(["Healthcare", "Education", "Environment"]);
-    setCriteriaTags(["Innovation", "Code Quality", "Market Potential"]);
-    setTechInput(""); setThemeInput(""); setCriteriaInput("");
-    setIsAllowed(true);
+  const submit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    setTouched(true);
+    if (nameError || dateError || criteriaError) return;
+    mut.mutate({
+      name: name.trim(),
+      description: description.trim(),
+      theme: themes.join(", "),
+      technologies: technologies.join(", "),
+      criteria: criteria.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), weight: c.weight })),
+      startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
+      deadline: deadline ? new Date(deadline).toISOString() : undefined,
+      isAllowed,
+    });
   };
 
-  const addTag = useCallback((value: string, tags: string[], setTags: (t: string[]) => void, setInput: (v: string) => void) => {
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    if (trimmed.length > MAX_TAG_LENGTH) {
-      toast.error(`Tag must be ${MAX_TAG_LENGTH} characters or less`);
-      return;
-    }
-    if (!tags.includes(trimmed)) setTags([...tags, trimmed]);
-    setInput("");
-  }, []);
-
-  const removeTag = useCallback((tag: string, tags: string[], setTags: (t: string[]) => void) =>
-    setTags(tags.filter((t) => t !== tag))
-  , []);
-
-  const handleKeyDown = useCallback((
-    e: KeyboardEvent<HTMLInputElement>,
-    value: string,
-    tags: string[],
-    setTags: (t: string[]) => void,
-    setInput: (v: string) => void,
-  ) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      addTag(value, tags, setTags, setInput);
-    } else if (e.key === "Backspace" && !value && tags.length > 0) {
-      setTags(tags.slice(0, -1));
-    }
-  }, [addTag]);
-
-  if (!open) return null;
-
-  const canSubmit = name.trim().length >= 3 && name.trim().length <= MAX_NAME_LENGTH && !mut.isPending;
-  const deadlineWithTime = deadline
-    ? (() => {
-        const d = new Date(deadline.getTime()); // Clone to avoid mutating original
-        d.setHours(Number.parseInt(deadlineHour, 10), Number.parseInt(deadlineMinute, 10), 0, 0);
-        return d;
-      })()
-    : undefined;
+  const updateCriterion = (id: number, patch: Partial<CriterionDraft>) =>
+    setCriteria((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.55)" }}
-      onClick={onClose}
-    >
-      <div
-        className="bg-card rounded-lg w-full max-w-xl max-h-[90vh] overflow-y-auto"
-        style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "6px 6px 0 var(--brand-ink)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 py-4 sticky top-0 bg-card z-10"
-          style={{ borderBottom: "2.5px solid var(--brand-ink)" }}
-        >
-          <div>
-            <h2 className="text-lg font-medium">New hackathon</h2>
-            <p className="text-[11px] text-muted-foreground">Configure evaluation criteria for your event</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-xs font-medium px-2 py-1 rounded-sm press-brutal"
-            style={{ border: "1.5px solid var(--brand-ink)" }}
-          >
-            ✕
-          </button>
+    <Modal open={open} onClose={onClose} title="New hackathon" subtitle="Tell the jury what matters and how much." width="max-w-2xl">
+      <form onSubmit={submit} className="space-y-6" noValidate>
+        <div>
+          <label htmlFor="hk-name" className="label">Name *</label>
+          <input
+            id="hk-name"
+            className="field"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Climate Hack 2026"
+            maxLength={120}
+            aria-invalid={touched && !!nameError}
+            aria-describedby="hk-name-err"
+          />
+          {touched && nameError && <p id="hk-name-err" className="text-sm text-[#b42318] mt-1.5">{nameError}</p>}
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!canSubmit) {
-              toast.error(`Name must be between 3 and ${MAX_NAME_LENGTH} characters`);
-              return;
-            }
-            if (description.length > MAX_DESCRIPTION_LENGTH) {
-              toast.error(`Description must be ${MAX_DESCRIPTION_LENGTH} characters or less`);
-              return;
-            }
-            mut.mutate({
-              name,
-              description,
-              technologies: techTags.join(", "),
-              theme: themeTags.join(", "),
-              criteria: criteriaTags.join(", "),
-              deadline: deadlineWithTime ? deadlineWithTime.toISOString() : undefined,
-              isAllowed,
-            });
-          }}
-          className="p-6 space-y-5"
-        >
-          {/* Name */}
-          <Field label="Hackathon name *">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. AI Hackathon 2025"
-              className="w-full text-sm px-3 py-2 rounded-md outline-none bg-white"
-              style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-            />
-          </Field>
+        <div>
+          <label htmlFor="hk-desc" className="label">Brief</label>
+          <textarea
+            id="hk-desc"
+            className="field resize-y"
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="The challenge participants are solving. The judges read this to assess theme fit."
+            maxLength={4000}
+          />
+        </div>
 
-          {/* Description */}
-          <Field label="Description">
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              placeholder="What is this hackathon about?"
-              className="w-full text-sm px-3 py-2 rounded-md outline-none bg-white resize-none"
-              style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-            />
-          </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TagField id="hk-themes" label="Themes" tags={themes} onChange={setThemes} placeholder="Climate, Health…" />
+          <TagField
+            id="hk-tech"
+            label="Expected technologies"
+            hint="Projects using none of them get flagged"
+            tags={technologies}
+            onChange={setTechnologies}
+            placeholder="Python, React…"
+          />
+        </div>
 
-          {/* Technologies */}
-          <Field label="Technologies" hint="Enter to add">
-            <TagInput
-              id="tech-input"
-              tags={techTags}
-              input={techInput}
-              color="var(--brand-sky)"
-              onInputChange={setTechInput}
-              onKeyDown={(e) => handleKeyDown(e, techInput, techTags, setTechTags, setTechInput)}
-              onBlur={() => addTag(techInput, techTags, setTechTags, setTechInput)}
-              onRemove={(t) => removeTag(t, techTags, setTechTags)}
-            />
-          </Field>
-
-          {/* Themes */}
-          <Field label="Themes" hint="Enter to add">
-            <TagInput
-              id="theme-input"
-              tags={themeTags}
-              input={themeInput}
-              color="var(--brand-pink)"
-              onInputChange={setThemeInput}
-              onKeyDown={(e) => handleKeyDown(e, themeInput, themeTags, setThemeTags, setThemeInput)}
-              onBlur={() => addTag(themeInput, themeTags, setThemeTags, setThemeInput)}
-              onRemove={(t) => removeTag(t, themeTags, setThemeTags)}
-            />
-          </Field>
-
-          {/* Criteria */}
-          <Field label="Evaluation criteria" hint="Used by AI agents to score projects">
-            <TagInput
-              id="criteria-input"
-              tags={criteriaTags}
-              input={criteriaInput}
-              color="var(--brand-mint)"
-              onInputChange={setCriteriaInput}
-              onKeyDown={(e) => handleKeyDown(e, criteriaInput, criteriaTags, setCriteriaTags, setCriteriaInput)}
-              onBlur={() => addTag(criteriaInput, criteriaTags, setCriteriaTags, setCriteriaInput)}
-              onRemove={(t) => removeTag(t, criteriaTags, setCriteriaTags)}
-            />
-          </Field>
-
-          {/* Deadline */}
-          <Field label="Deadline (optional)">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setCalendarOpen((v) => !v)}
-                className="w-full text-sm px-3 py-2 rounded-md bg-white text-left flex items-center justify-between gap-2"
-                style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-              >
-                <span className={deadline ? "text-foreground" : "text-muted-foreground"}>
-                  {deadline
-                    ? `${deadline.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })} ${deadlineWithTime?.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) ?? ""}`.trim()
-                    : "Pick a date…"}
-                </span>
-                <div className="flex items-center gap-1 shrink-0">
-                  {deadline && (
-                    <span
-                      onClick={(e) => { e.stopPropagation(); setDeadline(undefined); }}
-                      className="hover:opacity-60 cursor-pointer"
-                    >
-                      <X size={13} />
-                    </span>
-                  )}
-                  <CalendarIcon size={14} />
-                </div>
-              </button>
-
-              {calendarOpen && (
-                <div
-                  className="absolute top-full left-0 mt-2 z-30 bg-card rounded-md"
-                  style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "5px 5px 0 var(--brand-ink)" }}
-                >
-                  <Calendar
-                    mode="single"
-                    selected={deadline}
-                    onSelect={(d) => { setDeadline(d); }}
-                    disabled={{ before: new Date() }}
-                    initialFocus
-                    className="border-0 shadow-none rounded-none w-full"
-                  />
-
-                  <div
-                    className="p-3 flex items-center gap-2"
-                    style={{ borderTop: "2.5px solid var(--brand-ink)" }}
-                  >
-                    <div className="flex-1">
-                      <Select value={deadlineHour} onValueChange={setDeadlineHour}>
-                        <SelectTrigger
-                          className="bg-white"
-                          style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-                        >
-                          <SelectValue placeholder="Hour" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map((h) => (
-                            <SelectItem key={h} value={h}>
-                              {h}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex-1">
-                      <Select value={deadlineMinute} onValueChange={setDeadlineMinute}>
-                        <SelectTrigger
-                          className="bg-white"
-                          style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-                        >
-                          <SelectValue placeholder="Min" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map((m) => (
-                            <SelectItem key={m} value={m}>
-                              {m}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <button
-                      type="button"
-                      className="text-xs font-medium px-3 py-2 rounded-md press-brutal bg-white"
-                      style={{ border: "2.5px solid var(--brand-ink)", boxShadow: "3px 3px 0 var(--brand-ink)" }}
-                      onClick={() => setCalendarOpen(false)}
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Field>
-
-          {/* Submissions toggle */}
-          <div
-            className="flex items-center justify-between p-3 rounded-md"
-            style={{ border: "2px solid var(--brand-ink)", background: isAllowed ? "var(--brand-mint)" : "#f5f5f5" }}
-          >
-            <div>
-              <p className="text-sm font-medium">Accept submissions</p>
-              <p className="text-[11px] text-muted-foreground">
-                {isAllowed ? "Open — participants can submit" : "Closed"}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsAllowed((v) => !v)}
-              className="relative w-12 h-6 rounded-full transition-colors shrink-0"
-              style={{ background: isAllowed ? "var(--brand-mint)" : "#ddd", border: "2.5px solid var(--brand-ink)" }}
-              role="switch"
-              aria-checked={isAllowed}
-              aria-label="Accept submissions"
-            >
-              <span
-                className="absolute top-0.5 w-4 h-4 rounded-full transition-transform"
-                style={{ background: "var(--brand-ink)", transform: isAllowed ? "translateX(2px)" : "translateX(-20px)" }}
-              />
-            </button>
+        <fieldset>
+          <div className="flex items-end justify-between mb-2">
+            <legend className="label mb-0">Judging criteria & weights</legend>
+            <span className="num text-xs text-muted-foreground">total weight {totalWeight}</span>
           </div>
-
+          <ul className="space-y-2">
+            <AnimatePresence initial={false}>
+              {criteria.map((c) => {
+                const judge = routeCriterion(c.name || "x");
+                const share = totalWeight ? Math.round(((c.weight || 0) / totalWeight) * 100) : 0;
+                return (
+                  <motion.li
+                    key={c.id}
+                    layout
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="rounded-xl border-2 border-ink bg-card p-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="field min-h-9 py-1.5 flex-1"
+                        value={c.name}
+                        onChange={(e) => updateCriterion(c.id, { name: e.target.value })}
+                        placeholder="Criterion name"
+                        aria-label="Criterion name"
+                        maxLength={80}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => setCriteria((cs) => cs.filter((x) => x.id !== c.id))}
+                        aria-label={`Remove ${c.name || "criterion"}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3 mt-2.5">
+                      <input
+                        type="range"
+                        min={0}
+                        max={50}
+                        step={5}
+                        value={c.weight}
+                        onChange={(e) => updateCriterion(c.id, { weight: Number(e.target.value) })}
+                        className="flex-1 accent-[var(--ink)]"
+                        aria-label={`Weight of ${c.name || "criterion"}`}
+                      />
+                      <span className="num text-sm font-bold w-10 text-right">{share}%</span>
+                      <span className="chip text-[11px]" style={{ background: JUDGE_COLORS[judge] }} title="Judge who scores this criterion">
+                        {JUDGE_NAMES[judge]}
+                      </span>
+                    </div>
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
+          </ul>
           <button
-            type="submit"
-            disabled={!canSubmit}
-            className="w-full text-sm font-medium py-2.5 rounded-md press-brutal disabled:opacity-60"
-            style={{
-              background: "#F4D738",
-              color: "#111",
-              border: "2.5px solid var(--brand-ink)",
-              boxShadow: "4px 4px 0 var(--brand-ink)",
-            }}
+            type="button"
+            className="btn btn-sm mt-3"
+            onClick={() => setCriteria((cs) => [...cs, { id: nextId++, name: "", weight: 10 }])}
+            disabled={criteria.length >= 8}
           >
-            {mut.isPending ? "Creating…" : "Create hackathon"}
+            <Plus size={14} /> Add criterion
           </button>
-        </form>
-      </div>
-    </div>
+          {touched && criteriaError && <p className="text-sm text-[#b42318] mt-1.5">{criteriaError}</p>}
+        </fieldset>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="hk-start" className="label">Starts</label>
+            <input id="hk-start" type="datetime-local" className="field" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+            <p className="text-xs text-muted-foreground mt-1">Commits before this are flagged.</p>
+          </div>
+          <div>
+            <label htmlFor="hk-deadline" className="label">Submission deadline</label>
+            <input
+              id="hk-deadline"
+              type="datetime-local"
+              className="field"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              aria-invalid={touched && !!dateError}
+            />
+            {touched && dateError && <p className="text-sm text-[#b42318] mt-1">{dateError}</p>}
+          </div>
+        </div>
+
+        <label className="flex items-center justify-between gap-4 rounded-xl border-2 border-ink p-4 cursor-pointer" style={{ background: isAllowed ? "var(--mint)" : "var(--card)" }}>
+          <span>
+            <span className="block font-bold">Accept submissions now</span>
+            <span className="text-sm text-muted-foreground">{isAllowed ? "Participants can submit right away." : "You can open submissions later."}</span>
+          </span>
+          <input type="checkbox" className="sr-only peer" checked={isAllowed} onChange={(e) => setIsAllowed(e.target.checked)} />
+          <span className="relative w-12 h-7 rounded-full border-2 border-ink bg-card shrink-0 peer-focus-visible:outline peer-focus-visible:outline-3" aria-hidden>
+            <motion.span
+              className="absolute top-0.5 size-5 rounded-full bg-ink"
+              animate={{ left: isAllowed ? 22 : 2 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            />
+          </span>
+        </label>
+
+        <button type="submit" className="btn btn-primary w-full" disabled={mut.isPending}>
+          {mut.isPending ? "Creating…" : "Create hackathon"}
+        </button>
+      </form>
+    </Modal>
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
-        {hint && <span className="text-[10px] text-muted-foreground">{hint}</span>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function TagInput({
-  id, tags, input, color, onInputChange, onKeyDown, onBlur, onRemove,
+function TagField({
+  id, label, hint, tags, onChange, placeholder,
 }: {
   id: string;
+  label: string;
+  hint?: string;
   tags: string[];
-  input: string;
-  color: string;
-  onInputChange: (v: string) => void;
-  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
-  onBlur: () => void;
-  onRemove: (t: string) => void;
+  onChange: (tags: string[]) => void;
+  placeholder: string;
 }) {
+  const [input, setInput] = useState("");
+  const add = () => {
+    const value = input.trim().replace(/,$/, "");
+    if (value && !tags.some((t) => t.toLowerCase() === value.toLowerCase())) onChange([...tags, value.slice(0, 50)]);
+    setInput("");
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      add();
+    } else if (e.key === "Backspace" && !input && tags.length) {
+      onChange(tags.slice(0, -1));
+    }
+  };
   return (
-    <div
-      className="flex flex-wrap gap-1.5 p-2 rounded-md bg-white min-h-[44px] cursor-text"
-      style={{ border: "2.5px solid var(--brand-ink)" }}
-      onClick={() => document.getElementById(id)?.focus()}
-    >
-      {tags.map((t) => (
-        <span
-          key={t}
-          className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-sm"
-          style={{ background: color, border: "1.5px solid var(--brand-ink)", color: "var(--brand-ink)" }}
-        >
-          {t}
-          <button type="button" onClick={() => onRemove(t)} className="text-[10px] hover:opacity-60 ml-0.5">✕</button>
-        </span>
-      ))}
-      <input
-        id={id}
-        value={input}
-        onChange={(e) => onInputChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        onBlur={onBlur}
-        placeholder={tags.length === 0 ? "Type and press Enter…" : ""}
-        className="flex-1 min-w-[100px] text-sm outline-none bg-transparent py-0.5"
-      />
+    <div>
+      <label htmlFor={id} className="label">{label}</label>
+      <div className="field flex flex-wrap gap-1.5 items-center min-h-11 py-1.5 focus-within:shadow-[3px_3px_0_var(--ink)]">
+        {tags.map((t) => (
+          <span key={t} className="chip bg-yellow">
+            {t}
+            <button type="button" onClick={() => onChange(tags.filter((x) => x !== t))} aria-label={`Remove ${t}`} className="opacity-70 hover:opacity-100">
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          id={id}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={onKey}
+          onBlur={add}
+          placeholder={tags.length ? "" : placeholder}
+          className="flex-1 min-w-[90px] outline-none bg-transparent text-sm py-1"
+        />
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">{hint ?? "Press Enter to add"}</p>
     </div>
   );
 }
